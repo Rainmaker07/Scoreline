@@ -1,5 +1,29 @@
 import SwiftUI
 
+/// A league page pushed from elsewhere (e.g. a team's competition list).
+struct LeagueScreen: View {
+    let league: League
+    @State private var openGame: Game?
+    @EnvironmentObject private var store: AppStore
+
+    var body: some View {
+        ScrollView {
+            LeaguePage(league: league, openGame: $openGame).padding(16)
+        }
+        .background(PageBackground(color: league.color))
+        .navigationTitle(league.name)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.visible, for: .navigationBar)
+        .sheet(item: $openGame) { g in
+            NavigationStack {
+                GameDetailView(game: g).navigationDestination(for: Route.self) { RouteView(route: $0) }
+            }
+            .presentationBackground(Theme.bg)
+            .environmentObject(store)
+        }
+    }
+}
+
 /// One league's page: scores card, then standings and stat leaders below.
 struct LeaguePage: View {
     let league: League
@@ -9,11 +33,67 @@ struct LeaguePage: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             ScoresCard(league: league, refresh: refresh, openGame: $openGame)
-            SectionHeader(title: league.id == "ucl" ? "League Phase" : "Standings")
-            StandingsSection(league: league, refresh: refresh)
+            if league.id == "nba" {
+                let year = ESPN.nbaCupYear()
+                NavigationLink(value: Route.wiki(title: "\(year) NBA Cup", name: "NBA Cup \(year)")) {
+                    HStack(spacing: 12) {
+                        Image(systemName: "trophy.fill").font(.title2).foregroundStyle(.yellow)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("NBA Cup \(year)").font(.headline)
+                            Text("Groups, wild cards and knockout bracket").font(.footnote).foregroundStyle(Theme.secondary)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right").foregroundStyle(Theme.secondary)
+                    }
+                    .card()
+                }
+                .buttonStyle(.plain)
+            }
+            if league.isCup {
+                SectionHeader(title: "Rounds")
+                CupRoundsSection(league: league, refresh: refresh, openGame: $openGame)
+            } else {
+                SectionHeader(title: league.isUEFA ? "League Phase" : "Standings")
+                StandingsSection(league: league, refresh: refresh)
+            }
             if league.hasStatLeaders {
                 SectionHeader(title: "Stat Leaders")
                 LeadersSection(league: league, refresh: refresh, limit: 10)
+            }
+        }
+    }
+}
+
+/// Knockout cup: results and fixtures grouped by round.
+struct CupRoundsSection: View {
+    let league: League
+    var refresh = 0
+    @Binding var openGame: Game?
+    @State private var selected: String?
+
+    var body: some View {
+        Loader(id: "\(league.id)-rounds-\(refresh)", load: { try await ESPN.cupRounds(league) }) { rounds in
+            if rounds.isEmpty {
+                MessageCard(text: "No rounds scheduled yet.")
+            } else {
+                // Default: the latest round that has started.
+                let current = rounds.last { $0.start <= Date() } ?? rounds[0]
+                let round = rounds.first { $0.label == selected } ?? current
+                VStack(alignment: .leading, spacing: 12) {
+                    ChipRow(items: rounds.map(\.label), selected: round.label, title: { $0 }) { selected = $0 }
+                    Text(round.detail).font(.footnote).foregroundStyle(Theme.secondary).padding(.horizontal, 4)
+                    Loader(id: "\(league.id)-round-\(round.label)-\(refresh)",
+                           poll: { (games: [Game]) in games.contains(where: { $0.state == .live }) ? 20 : nil },
+                           load: { try await ESPN.cupGames(league, round: round) }) { games in
+                        if games.isEmpty {
+                            MessageCard(text: "Draw not made yet.")
+                        } else {
+                            GameList(games: games, openGame: $openGame, showDayHeaders: true)
+                                .padding(.horizontal, 14)
+                                .background(Theme.card, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+                        }
+                    }
+                }
             }
         }
     }
@@ -188,10 +268,21 @@ struct MyTeamsCard: View {
                 if let last = games.last(where: { $0.state == .post }) { pick.append(last) }
                 if let next = games.first(where: { $0.state != .post && $0.date > Date().addingTimeInterval(-3 * 3600) }) { pick.append(next) }
             }
-            // Live scores come from the scoreboard (team schedules lag behind).
-            if league.provider == .espn, pick.contains(where: { Calendar.current.isDateInToday($0.date) }),
-               let board = try? await ESPN.scoreboard(league, date: Date()) {
-                pick = pick.map { g in board.first { $0.id == g.id } ?? g }
+            // Team schedules lack records and lag behind live scores: use the
+            // scoreboard version of each game when it's within the next week.
+            if league.provider == .espn {
+                let cal = Calendar.current
+                var days = Set<Date>()
+                for g in pick where g.state != .post || cal.isDateInToday(g.date) {
+                    let d = cal.startOfDay(for: g.date)
+                    if d.timeIntervalSinceNow < 8 * 86_400 {
+                        days.insert(d)
+                        days.insert(cal.date(byAdding: .day, value: -1, to: d)!)
+                    }
+                }
+                if !days.isEmpty, let board = try? await GameFeed.days(league, Array(days)) {
+                    pick = pick.map { g in board.first { $0.id == g.id } ?? g }
+                }
             }
             for g in pick where seen.insert(g.id).inserted { out.append(g) }
         }

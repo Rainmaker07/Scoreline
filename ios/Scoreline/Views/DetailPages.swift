@@ -106,6 +106,7 @@ struct TeamView: View {
     let leagueId: String
     let teamId: String
     @State private var tab = 0
+    @State private var competition: String?
 
     var body: some View {
         let league = League.byId(leagueId)!
@@ -126,17 +127,30 @@ struct TeamView: View {
                         })
                     )
                     VStack(spacing: 14) {
+                        if t.competitions.count > 1 {
+                            CompetitionSwitcher(competitions: t.competitions, selected: $competition)
+                        }
                         Picker("", selection: $tab) {
                             Text("Games").tag(0)
                             Text("Roster").tag(1)
                             Text("Stats").tag(2)
                         }
                         .pickerStyle(.segmented)
+                        let games = competition.map { c in t.games.filter { $0.leagueId == c } } ?? t.games
                         switch tab {
-                        case 0: TeamGames(games: t.games)
+                        case 0: TeamGames(games: games, showCompetition: t.competitions.count > 1 && competition == nil)
                         case 1: TeamRoster(league: league, roster: t.roster)
                         default:
-                            InfoList(title: "Season", rows: t.stats)
+                            if let c = competition.flatMap(League.byId) {
+                                CompetitionRecord(team: t, league: c, games: games)
+                            } else {
+                                InfoList(title: "Season", rows: t.stats)
+                                if t.competitions.count > 1 {
+                                    ForEach(t.competitions) { c in
+                                        CompetitionRecord(team: t, league: c, games: t.games.filter { $0.leagueId == c.id })
+                                    }
+                                }
+                            }
                             InfoList(title: "Injuries", rows: t.injuries)
                         }
                     }
@@ -168,8 +182,76 @@ struct FormBadges: View {
     }
 }
 
+/// "All · Bundesliga · Champions League · DFB-Pokal" filter, with a link to each competition.
+struct CompetitionSwitcher: View {
+    let competitions: [League]
+    @Binding var selected: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    Chip(title: "All", selected: selected == nil) { selected = nil }
+                    ForEach(competitions) { c in
+                        Button { selected = c.id } label: {
+                            HStack(spacing: 5) {
+                                LeagueIcon(league: c, size: 16)
+                                Text(c.short).lineLimit(1)
+                            }
+                            .font(.subheadline.weight(.semibold))
+                            .padding(.horizontal, 11)
+                            .padding(.vertical, 7)
+                            .foregroundStyle(selected == c.id ? Color.black : Theme.secondary)
+                            .background(selected == c.id ? Color.white : Theme.card, in: Capsule())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            if let id = selected, let c = League.byId(id) {
+                NavigationLink(value: Route.league(c.id)) {
+                    HStack(spacing: 6) {
+                        Text("Open \(c.name)").font(.footnote.weight(.semibold))
+                        Image(systemName: "chevron.right").font(.caption2.weight(.bold))
+                    }
+                    .foregroundStyle(Color(hex: "8ab4ff"))
+                }
+                .buttonStyle(.plain)
+                .padding(.leading, 4)
+            }
+        }
+    }
+}
+
+/// Played / won / drawn / lost and goals in one competition, from the team's games.
+private struct CompetitionRecord: View {
+    let team: TeamPage
+    let league: League
+    let games: [Game]
+
+    var body: some View {
+        let done = games.filter { $0.state == .post }
+        var w = 0, d = 0, l = 0, gf = 0, ga = 0
+        for g in done {
+            let me = g.home.id == team.id ? g.home : g.away
+            let them = g.home.id == team.id ? g.away : g.home
+            let a = Int(me.score ?? "") ?? 0, b = Int(them.score ?? "") ?? 0
+            gf += a; ga += b
+            if a > b { w += 1 } else if a == b { d += 1 } else { l += 1 }
+        }
+        let rows = [InfoRow(label: "Played", value: "\(done.count)"),
+                    InfoRow(label: "Won – drawn – lost", value: "\(w) – \(d) – \(l)"),
+                    InfoRow(label: "Goals", value: "\(gf):\(ga)"),
+                    InfoRow(label: "Next", value: games.first { $0.state != .post }.map { g in
+                        "\(g.home.id == team.id ? "vs" : "@") \(g.home.id == team.id ? g.away.short : g.home.short) · \(Fmt.day(g.date))"
+                    } ?? "–")]
+        return InfoList(title: league.name, rows: rows)
+    }
+}
+
 private struct TeamGames: View {
     let games: [Game]
+    var showCompetition = false
     @State private var showAll = false
 
     var body: some View {
@@ -198,10 +280,16 @@ private struct TeamGames: View {
                 if i > 0 { Divider().overlay(Theme.separator) }
                 NavigationLink(value: Route.game(g)) {
                     VStack(alignment: .leading, spacing: 0) {
-                        Text(g.date.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day()))
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(Theme.secondary)
-                            .padding(.top, 8)
+                        HStack(spacing: 6) {
+                            Text(g.date.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day()))
+                            if showCompetition {
+                                LeagueIcon(league: g.league, size: 12)
+                                Text(g.league.short)
+                            }
+                        }
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Theme.secondary)
+                        .padding(.top, 8)
                         GameRow(game: g)
                     }
                 }
@@ -253,9 +341,25 @@ private struct TeamRoster: View {
 
 // MARK: - Player
 
+extension PlayerView {
+    /// "2026-27 German Bundesliga" -> "Bundesliga"
+    static func shortName(_ s: String) -> String {
+        var n = s
+        if let r = n.range(of: #"^\d{4}(-\d{2})?\s+"#, options: .regularExpression) { n.removeSubrange(r) }
+        for p in ["German ", "English ", "UEFA "] where n.hasPrefix(p) { n.removeFirst(p.count) }
+        return n
+    }
+
+    static func matches(_ league: String, _ competition: String) -> Bool {
+        let a = shortName(league).lowercased(), b = shortName(competition).lowercased()
+        return !a.isEmpty && (a.contains(b) || b.contains(a))
+    }
+}
+
 struct PlayerView: View {
     let leagueId: String
     let playerId: String
+    @State private var competition: String?
 
     var body: some View {
         let league = League.byId(leagueId)!
@@ -280,8 +384,18 @@ struct PlayerView: View {
                             }
                             .buttonStyle(.plain)
                         }
-                        InfoList(title: "This season", rows: p.seasonStats)
-                        if !p.gameLog.isEmpty { GameLogView(labels: p.gameLogLabels, entries: p.gameLog) }
+                        if p.competitionStats.count > 1 {
+                            ChipRow(items: ["All"] + p.competitionStats.map(\.name),
+                                    selected: competition ?? "All",
+                                    title: { Self.shortName($0) }) { competition = $0 == "All" ? nil : $0 }
+                        }
+                        if let c = competition, let split = p.competitionStats.first(where: { $0.name == c }) {
+                            InfoList(title: Self.shortName(c), rows: split.rows)
+                        } else {
+                            InfoList(title: "This season", rows: p.seasonStats)
+                        }
+                        let log = competition.map { c in p.gameLog.filter { Self.matches($0.league, c) } } ?? p.gameLog
+                        if !log.isEmpty { GameLogView(labels: p.gameLogLabels, entries: Array(log.prefix(10))) }
                         ForEach(Array(p.tables.enumerated()), id: \.offset) { _, t in StatTableView(table: t) }
                         InfoList(title: "Bio", rows: p.bio)
                     }

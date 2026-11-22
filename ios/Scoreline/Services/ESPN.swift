@@ -149,6 +149,14 @@ enum ESPN {
             return Scorer(teamId: d["team"]["id"].str, text: text.trimmingCharacters(in: .whitespaces))
         }
         let broadcast = comp["broadcasts"][0]["names"].array.compactMap { $0.string }.joined(separator: ", ")
+        var note = comp["notes"][0]["headline"].string ?? comp["series"]["summary"].string
+        let pens = cs.compactMap { $0["shootoutScore"].int }
+        if pens.count == 2 {
+            let hp = cs.first { $0["homeAway"].str == "home" }?["shootoutScore"].int ?? 0
+            let ap = cs.first { $0["homeAway"].str == "away" }?["shootoutScore"].int ?? 0
+            let pensText = league.family == .soccer ? "Penalties \(hp)–\(ap)" : "Shootout \(hp)–\(ap)"
+            note = [note, pensText].compactMap { $0 }.joined(separator: " · ")
+        }
         return Game(
             id: e["id"].str,
             leagueId: league.id,
@@ -157,7 +165,7 @@ enum ESPN {
             statusText: st.text,
             home: home,
             away: away,
-            note: comp["notes"][0]["headline"].string ?? comp["series"]["summary"].string,
+            note: note,
             broadcast: broadcast.isEmpty ? comp["broadcast"].string : broadcast,
             scorers: scorers
         )
@@ -233,7 +241,8 @@ enum ESPN {
                             teamLogo: team["logos"][0]["href"].url,
                             headshot: nil,
                             value: l["value"].double.map { String(Int($0)) } ?? "",
-                            detail: l["displayValue"].string
+                            // "Matches: 10, Goals: 9" -> "10 matches" (the number is already on the right)
+                            detail: matchesText(l["displayValue"].str)
                         )
                     }
                 )
@@ -263,6 +272,12 @@ enum ESPN {
                 }
             )
         }
+    }
+
+    static func matchesText(_ s: String) -> String? {
+        guard let r = s.range(of: #"Matches:\s*(\d+)"#, options: .regularExpression) else { return nil }
+        let n = s[r].filter(\.isNumber)
+        return n == "1" ? "1 match" : "\(n) matches"
     }
 
     /// Categories ESPN fills with low-sample outliers.
@@ -390,6 +405,11 @@ extension ESPN {
         let events = d["events"].array
         guard let ev = events.first(where: { $0["major"].bool == true && $0["name"].str.lowercased().contains(first) })
             ?? events.first(where: { $0["major"].bool == true }) else { return nil }
+        return tennisEvent(ev, grouping: grouping)
+    }
+
+    /// Builds a draw from one ESPN tennis event (any tournament).
+    static func tennisEvent(_ ev: J, grouping: String) -> TennisEvent {
         let g = ev["groupings"].array.first { $0["grouping"]["slug"].str == grouping }
         let matches: [TennisMatch] = (g?["competitions"].array ?? []).compactMap { c in
             let round = c["round"]["displayName"].str

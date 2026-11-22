@@ -37,20 +37,34 @@ struct StatusLine: View {
     }
 }
 
-/// One score, never wrapping: shrinks before it breaks onto a second line.
+/// One score, never wrapping or truncating: three-digit scores start smaller,
+/// and anything that still doesn't fit shrinks instead of showing "1…".
 struct ScoreText: View {
     let text: String
     let dim: Bool
     var size: CGFloat = 44
 
     var body: some View {
+        let fitted = text.count >= 3 ? size * 0.8 : size
         Text(text)
-            .font(.score(size))
+            .font(.score(fitted))
             .monospacedDigit()
             .foregroundStyle(dim ? Theme.secondary.opacity(0.75) : .white)
             .lineLimit(1)
-            .minimumScaleFactor(0.5)
-            .fixedSize(horizontal: false, vertical: true)
+            .minimumScaleFactor(0.4)
+            .allowsTightening(true)
+    }
+}
+
+/// A team's record in place of the score before kick-off.
+struct RecordText: View {
+    let text: String?
+    var body: some View {
+        Text(text ?? "")
+            .font(.subheadline)
+            .foregroundStyle(Theme.secondary)
+            .lineLimit(1)
+            .minimumScaleFactor(0.6)
     }
 }
 
@@ -66,12 +80,13 @@ struct GameRow: View {
         let ln = Double(l.score ?? "") ?? 0
         let rn = Double(r.score ?? "") ?? 0
         let size: CGFloat = big ? 56 : 44
-        HStack(spacing: 6) {
+        // iPhone 13: ~330pt per row = 2×72 (teams) + 64 (status) + 2×~55 (scores).
+        HStack(spacing: 4) {
             TeamColumn(side: l, logoSize: big ? 64 : 40)
-                .frame(width: big ? 96 : 84)
+                .frame(width: big ? 88 : 72)
             Group {
                 if game.state == .pre {
-                    Text(l.record ?? "").font(.subheadline).foregroundStyle(Theme.secondary).lineLimit(1)
+                    RecordText(text: l.record)
                 } else {
                     ScoreText(text: l.score ?? "-", dim: game.state == .post && ln < rn, size: size)
                 }
@@ -83,17 +98,20 @@ struct GameRow: View {
                     Text(game.statusText.contains("Postponed") ? "PPD" : Fmt.time(game.date))
                         .font(.headline.weight(.bold))
                         .monospacedDigit()
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
                     if !Calendar.current.isDateInToday(game.date) {
                         Text(Fmt.day(game.date)).font(.caption).foregroundStyle(Theme.secondary)
+                            .lineLimit(1).minimumScaleFactor(0.7)
                     }
                 } else {
                     StatusLine(state: game.state, text: game.statusText)
                 }
             }
-            .frame(width: 74)
+            .frame(width: 64)
             Group {
                 if game.state == .pre {
-                    Text(r.record ?? "").font(.subheadline).foregroundStyle(Theme.secondary).lineLimit(1)
+                    RecordText(text: r.record)
                 } else {
                     ScoreText(text: r.score ?? "-", dim: game.state == .post && rn < ln, size: size)
                 }
@@ -101,7 +119,7 @@ struct GameRow: View {
             .frame(maxWidth: .infinity)
             .layoutPriority(1)
             TeamColumn(side: r, logoSize: big ? 64 : 40)
-                .frame(width: big ? 96 : 84)
+                .frame(width: big ? 88 : 72)
         }
         .padding(.vertical, 14)
         .overlay(alignment: .topLeading) {
@@ -159,7 +177,8 @@ struct GameList: View {
                     VStack(spacing: 0) {
                         GameRow(game: g, favorite: isFavorite(g))
                         ScorersLine(game: g)
-                        if let note = g.note, !note.isEmpty, g.league.family != .soccer || g.state != .post {
+                        if let note = g.note, !note.isEmpty,
+                           g.league.family != .soccer || g.state != .post || note.contains("Penalties") {
                             Text(note).font(.caption).foregroundStyle(Theme.secondary).padding(.bottom, 10)
                         }
                     }
@@ -208,13 +227,30 @@ enum GameFeed {
                 return all.filter { $0.date >= cal.date(byAdding: .day, value: 1, to: today)! }
             }
         default:
+            // ESPN groups games by US date; we group by the local calendar day, so
+            // fetch the neighbouring ESPN day too and filter by local date.
+            func day(_ n: Int) -> Date { cal.date(byAdding: .day, value: n, to: today)! }
             switch tab {
-            case .yesterday: return try await ESPN.scoreboard(league, date: cal.date(byAdding: .day, value: -1, to: today)!)
-            case .today: return try await ESPN.scoreboard(league, date: today)
+            case .yesterday:
+                return try await days(league, [day(-2), day(-1)]).filter { cal.isDate($0.date, inSameDayAs: day(-1)) }
+            case .today:
+                return try await days(league, [day(-1), day(0)]).filter { cal.isDateInToday($0.date) }
             case .upcoming:
-                return try await ESPN.scoreboard(league, from: cal.date(byAdding: .day, value: 1, to: today)!,
-                                                 to: cal.date(byAdding: .day, value: 10, to: today)!)
+                return try await days(league, (0...7).map(day)).filter { $0.date >= day(1) }
             }
+        }
+    }
+
+    /// Single-day requests in parallel (ESPN refuses date ranges for team sports).
+    static func days(_ league: League, _ dates: [Date]) async throws -> [Game] {
+        try await withThrowingTaskGroup(of: [Game].self) { group in
+            for d in dates { group.addTask { try await ESPN.scoreboard(league, date: d) } }
+            var all: [Game] = []
+            var seen = Set<String>()
+            for try await games in group {
+                for g in games where seen.insert(g.id).inserted { all.append(g) }
+            }
+            return all.sorted { $0.date < $1.date }
         }
     }
 }
@@ -263,7 +299,7 @@ struct ScoresCard: View {
         switch tab {
         case .yesterday: return "No games yesterday."
         case .today: return "No games today."
-        case .upcoming: return "No games in the next 10 days."
+        case .upcoming: return "No games in the next 7 days."
         }
     }
 }

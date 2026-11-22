@@ -60,7 +60,7 @@ struct GameHero: View {
                 }
             }
             HStack(spacing: 4) {
-                heroTeam(left).frame(width: 96)
+                heroTeam(left).frame(width: 84)
                 Group {
                     if game.state == .pre {
                         Text(left.record ?? "").font(.subheadline).foregroundStyle(.white.opacity(0.7))
@@ -78,7 +78,7 @@ struct GameHero: View {
                         StatusLine(state: game.state, text: game.statusText)
                     }
                 }
-                .frame(width: 70)
+                .frame(width: 64)
                 Group {
                     if game.state == .pre {
                         Text(right.record ?? "").font(.subheadline).foregroundStyle(.white.opacity(0.7))
@@ -88,7 +88,7 @@ struct GameHero: View {
                 }
                 .frame(maxWidth: .infinity)
                 .layoutPriority(1)
-                heroTeam(right).frame(width: 96)
+                heroTeam(right).frame(width: 84)
             }
             if let note, !note.isEmpty {
                 Text(note).font(.footnote).foregroundStyle(.white.opacity(0.75)).multilineTextAlignment(.center)
@@ -113,11 +113,27 @@ struct GameHero: View {
     }
 }
 
+enum DetailTab: String, CaseIterable {
+    case summary = "Summary", events = "Events", lineups = "Lineups", box = "Box Score", stats = "Stats"
+}
+
+struct DetailTabs: View {
+    let tabs: [DetailTab]
+    @Binding var selection: DetailTab
+    var body: some View {
+        Picker("", selection: $selection) {
+            ForEach(tabs, id: \.self) { Text($0.rawValue).tag($0) }
+        }
+        .pickerStyle(.segmented)
+    }
+}
+
 private struct GameDetailContent: View {
     let game: Game
     let summary: J
     var embedded = false
     let dismiss: () -> Void
+    @State private var tab: DetailTab?
 
     private var league: League { game.league }
     private var comp: J { summary["header"]["competitions"][0] }
@@ -151,23 +167,40 @@ private struct GameDetailContent: View {
         let g = live
         let left = g.ordered.left
         let right = g.ordered.right
+        let soccer = league.family == .soccer
+        let tabs: [DetailTab] = soccer ? [.events, .lineups, .stats] : [.summary, .box, .stats]
+        let current = tab ?? tabs[0]
         VStack(spacing: 14) {
             GameHero(game: g, left: left, right: right, note: g.note ?? comp["series"]["summary"].string,
                      embedded: embedded, dismiss: dismiss)
             Group {
-                if league.family != .soccer {
+                DetailTabs(tabs: tabs, selection: Binding(get: { current }, set: { tab = $0 }))
+                switch current {
+                case .events:
+                    TimelineCard(league: league, summary: summary, homeId: g.home.id)
+                    if summary["keyEvents"].array.isEmpty && g.state == .pre {
+                        MessageCard(text: "Goals, cards and substitutions appear here once the match starts.")
+                    }
+                    GameInfoCard(summary: summary)
+                case .lineups:
+                    LineupsCard(league: league, summary: summary, left: left, right: right, home: g.home, away: g.away)
+                case .summary:
                     LineScoreCard(league: league, left: left, right: right, comp: comp, hitsErrors: true)
-                }
-                if league.family == .soccer { TimelineCard(league: league, summary: summary, homeId: g.home.id) }
-                if league.family == .baseball { DecisionsCard(league: league, comp: comp) }
-                if league.family == .basketball { GameLeadersCard(league: league, summary: summary, left: left, right: right) }
-                TeamStatsCard(league: league, summary: summary, left: left, right: right)
-                if league.family == .soccer { LineupsCard(league: league, summary: summary, left: left, right: right) }
-                if league.family != .soccer {
+                    if league.family == .baseball { DecisionsCard(league: league, comp: comp) }
+                    if league.family == .basketball { GameLeadersCard(league: league, summary: summary, left: left, right: right) }
+                    GameInfoCard(summary: summary)
+                case .box:
                     BoxScoreCards(league: league, summary: summary, side: left)
                     BoxScoreCards(league: league, summary: summary, side: right)
+                    if summary["boxscore"]["players"].array.isEmpty {
+                        MessageCard(text: "The box score appears once the game starts.")
+                    }
+                case .stats:
+                    TeamStatsCard(league: league, summary: summary, left: left, right: right)
+                    if summary["boxscore"]["teams"].array.allSatisfy({ !$0["statistics"].exists || $0["statistics"].array.isEmpty }) {
+                        MessageCard(text: "Team stats appear once the game starts.")
+                    }
                 }
-                GameInfoCard(summary: summary)
             }
             .padding(.horizontal, 16)
         }
@@ -180,6 +213,7 @@ private struct BBLGameDetailContent: View {
     let detail: BBL.GameDetail
     var embedded = false
     let dismiss: () -> Void
+    @State private var tab: DetailTab = .summary
 
     var body: some View {
         let g = detail.game
@@ -189,11 +223,14 @@ private struct BBLGameDetailContent: View {
         VStack(spacing: 14) {
             GameHero(game: g, left: left, right: right, note: g.note, embedded: embedded, dismiss: dismiss)
             Group {
-                LineScoreCard(league: league, left: left, right: right, comp: J(nil), hitsErrors: false)
-                if let lm = detail.teamStats[left.id], let rm = detail.teamStats[right.id] {
+                DetailTabs(tabs: [.summary, .box, .stats], selection: $tab)
+                if tab == .summary {
+                    LineScoreCard(league: league, left: left, right: right, comp: J(nil), hitsErrors: false)
+                }
+                if tab == .stats, let lm = detail.teamStats[left.id], let rm = detail.teamStats[right.id] {
                     TeamStatsBars(league: league, left: left, right: right, lm: lm, rm: rm)
                 }
-                ForEach([left, right], id: \.id) { side in
+                if tab == .box { ForEach([left, right], id: \.id) { side in
                     if let players = detail.box[side.id], !players.isEmpty {
                         BoxTable(
                             title: side.short + (detail.coaches[side.id].map { " · Coach \($0)" } ?? ""),
@@ -206,8 +243,8 @@ private struct BBLGameDetailContent: View {
                             totals: []
                         )
                     }
-                }
-                if !detail.info.isEmpty {
+                } }
+                if tab == .summary && !detail.info.isEmpty {
                     VStack(alignment: .leading, spacing: 0) {
                         CardTitle("Game Info")
                         ForEach(detail.info, id: \.label) { row in
@@ -722,7 +759,11 @@ private struct TimelineCard: View {
     private func row(_ e: J) -> some View {
         let isHome = e["team"]["id"].str == homeId
         let t = e["type"]["text"].str.lowercased()
-        let who = e["participants"].array.map { $0["athlete"]["displayName"].str }
+        let who = e["participants"].array.map { p -> String in
+            let full = p["athlete"]["displayName"].str
+            let parts = full.split(separator: " ")
+            return parts.count > 1 ? "\(parts[0].prefix(1)). \(parts.dropFirst().joined(separator: " "))" : full
+        }
         var icon = ""
         var what = e["type"]["text"].str
         if e["scoringPlay"].bool == true {
@@ -737,8 +778,11 @@ private struct TimelineCard: View {
             what = who.count > 1 ? "Off: \(who[1])" : "Substitution"
         }
         let content = VStack(alignment: isHome ? .trailing : .leading, spacing: 1) {
-            Text(isHome ? "\(who.first ?? "") \(icon)" : "\(icon) \(who.first ?? "")").font(.subheadline.weight(.semibold))
-            Text(what).font(.caption).foregroundStyle(Theme.secondary)
+            HStack(spacing: 5) {
+                Text(icon).font(.caption)
+                Text(who.first ?? "").font(.subheadline.weight(.semibold)).lineLimit(1).minimumScaleFactor(0.75)
+            }
+            Text(what).font(.caption).foregroundStyle(Theme.secondary).lineLimit(1).minimumScaleFactor(0.8)
         }
         return HStack {
             Group { if isHome { content } else { Color.clear } }.frame(maxWidth: .infinity, alignment: .trailing)
@@ -754,11 +798,26 @@ private struct LineupsCard: View {
     let summary: J
     let left: Side
     let right: Side
+    let home: Side
+    let away: Side
 
     var body: some View {
         let rosters = summary["rosters"].array
         let l = rosters.first { $0["team"]["id"].str == left.id }
         let r = rosters.first { $0["team"]["id"].str == right.id }
+        let h = rosters.first { $0["team"]["id"].str == home.id }
+        let a = rosters.first { $0["team"]["id"].str == away.id }
+        let events = summary["keyEvents"].array
+        if let h, let a, !h["roster"].array.isEmpty, !a["roster"].array.isEmpty {
+            PitchView(
+                league: league,
+                home: (home, h["formation"].str, Formation.lines(roster: h["roster"].array, formation: h["formation"].str, events: events)),
+                away: (away, a["formation"].str, Formation.lines(roster: a["roster"].array, formation: a["formation"].str, events: events))
+            )
+        }
+        if l == nil || r == nil || (l?["roster"].array.isEmpty ?? true) {
+            MessageCard(text: "Lineups are announced about an hour before kick-off.")
+        }
         if let l, let r, !l["roster"].array.isEmpty, !r["roster"].array.isEmpty {
             VStack(alignment: .leading, spacing: 10) {
                 CardTitle("Lineups")

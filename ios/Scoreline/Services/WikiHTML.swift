@@ -184,6 +184,18 @@ enum WikiHTML {
         return out
     }
 
+    /// Splits a page at h2/h3 headings: (title, html of that section).
+    static func chunks(in html: String) -> [(title: String, html: String)] {
+        let heads = matches(reHeading, in: html)
+        var out: [(String, String)] = []
+        for (i, h) in heads.enumerated() {
+            guard let hr = Range(h.range, in: html) else { continue }
+            let end = i + 1 < heads.count ? (Range(heads[i + 1].range, in: html)?.lowerBound ?? html.endIndex) : html.endIndex
+            out.append((clean(group(h, 2, in: html)), String(html[hr.upperBound..<end])))
+        }
+        return out
+    }
+
     /// Relative article links (`./Title`) whose title contains `needle`.
     static func links(in html: String, containing needle: String) -> [String] {
         let re = regex(##"href="\./([^"#]+)""##)

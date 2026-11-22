@@ -170,50 +170,51 @@ struct LeagueMenu: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Spacer()
-                Button { onSheet(.settings) } label: { Image(systemName: "gearshape").font(.title3) }
+                Button { onSheet(.settings) } label: { Image(systemName: "gearshape").font(.body) }
                     .buttonStyle(.plain)
                     .padding(.trailing, 14)
                 Button("Edit") { onSheet(.edit) }
-                    .font(.headline)
+                    .font(.subheadline.weight(.semibold))
                     .buttonStyle(.plain)
             }
             .foregroundStyle(Color(hex: "8ab4ff"))
-            .padding(.horizontal, 20)
-            .padding(.top, 16)
-            .padding(.bottom, 6)
+            .font(.subheadline)
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
+            .padding(.bottom, 4)
             ScrollView {
                 VStack(alignment: .leading, spacing: 2) {
-                    item(icon: AnyView(Image(systemName: "magnifyingglass").font(.title3)), title: "Search", subtitle: nil, on: false) { onSheet(.search) }
-                    item(icon: AnyView(Image(systemName: "house.fill").font(.title3)), title: "Home", subtitle: nil, on: selected == "home") { onSelect("home") }
-                    item(icon: AnyView(Image(systemName: "star.fill").font(.title3)), title: "My Teams", subtitle: nil, on: false) { onMyTeams() }
+                    item(icon: AnyView(Image(systemName: "magnifyingglass").font(.body)), title: "Search", subtitle: nil, on: false) { onSheet(.search) }
+                    item(icon: AnyView(Image(systemName: "house.fill").font(.body)), title: "Home", subtitle: nil, on: selected == "home") { onSelect("home") }
+                    item(icon: AnyView(Image(systemName: "star.fill").font(.body)), title: "My Teams", subtitle: nil, on: false) { onMyTeams() }
                     ForEach(store.visibleLeagues) { l in
-                        item(icon: AnyView(LeagueIcon(league: l, size: 28)), title: l.name, subtitle: l, on: selected == l.id) { onSelect(l.id) }
+                        item(icon: AnyView(LeagueIcon(league: l, size: 22)), title: l.name, subtitle: l, on: selected == l.id) { onSelect(l.id) }
                     }
                 }
-                .padding(.horizontal, 10)
-                .padding(.bottom, 12)
+                .padding(.horizontal, 8)
+                .padding(.bottom, 10)
             }
-            .frame(maxHeight: 560)
+            .frame(maxHeight: UIScreen.main.bounds.height * 0.6)
         }
-        .frame(width: 300)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 30, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 30, style: .continuous).stroke(.white.opacity(0.15), lineWidth: 1))
+        .frame(width: 250)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(.white.opacity(0.15), lineWidth: 1))
         .shadow(color: .black.opacity(0.4), radius: 30, y: 10)
     }
 
     private func item(icon: AnyView, title: String, subtitle: League?, on: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            HStack(spacing: 14) {
-                icon.frame(width: 30)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(title).font(.title3.weight(.medium)).lineLimit(1).minimumScaleFactor(0.8)
+            HStack(spacing: 11) {
+                icon.frame(width: 24)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(title).font(.body.weight(.medium)).lineLimit(1).minimumScaleFactor(0.8)
                     if let subtitle { LeagueStatusText(league: subtitle) }
                 }
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .background(on ? Color.white.opacity(0.14) : .clear, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background(on ? Color.white.opacity(0.14) : .clear, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -226,14 +227,12 @@ struct LeagueStatusText: View {
     @State private var text: String?
 
     var body: some View {
-        Group {
-            if let text {
-                Text(text)
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(text.hasSuffix("live") ? Theme.live : Theme.secondary)
-            }
-        }
-        .task(id: league.id) { text = await Self.status(league) }
+        // Always render (even empty): an empty view never runs its .task.
+        Text(text ?? " ")
+            .font(.caption.weight(.semibold))
+            .foregroundStyle((text ?? "").hasSuffix("live") ? Theme.live : Theme.secondary)
+            .lineLimit(1)
+            .task(id: league.id) { text = await Self.status(league) }
     }
 
     static func status(_ league: League) async -> String? {
@@ -308,7 +307,7 @@ struct SettingsView: View {
                 }
                 Section("Sources") {
                     Text("Scores, standings and stats: ESPN")
-                    Text("Basketball Bundesliga: easycredit-bbl.de")
+                    Text("easyCredit BBL: easycredit-bbl.de")
                     Text("Grand Tours and logos: Wikipedia (CC BY-SA)")
                 }
                 .font(.footnote)
@@ -379,7 +378,7 @@ enum BBLSearch {
         guard let groups = try? await BBL.standings() else { return [] }
         let needle = q.lowercased()
         return groups.flatMap(\.rows).filter { $0.name.lowercased().contains(needle) || $0.short.lowercased().contains(needle) }.map {
-            ESPN.SearchHit(id: "bbl-\($0.id)", kind: "team", name: $0.name, subtitle: "Basketball Bundesliga",
+            ESPN.SearchHit(id: "bbl-\($0.id)", kind: "team", name: $0.name, subtitle: "easyCredit BBL",
                            leagueId: "bbl", entityId: $0.id, image: $0.logo)
         }
     }
@@ -402,6 +401,18 @@ struct RouteView: View {
             FavoritesView()
         case .game(let game):
             GameDetailView(game: game, embedded: true)
+        case .tournament(let t):
+            TournamentView(t: t)
+        case .league(let id):
+            LeagueScreen(league: League.byId(id)!)
+        case .wiki(let title, let name):
+            ScrollView {
+                WikiEventView(title: title).padding(16)
+            }
+            .background(PageBackground(color: "1d428a"))
+            .navigationTitle(name)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar(.visible, for: .navigationBar)
         }
     }
 }

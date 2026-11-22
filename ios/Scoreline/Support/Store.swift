@@ -79,4 +79,7 @@ enum Route: Hashable {
     case rider(name: String)
     case favorites
     case game(Game)
+    case tournament(TournamentSummary)
+    case wiki(title: String, name: String)
+    case league(String)
 }

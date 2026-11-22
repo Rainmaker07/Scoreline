@@ -30,6 +30,7 @@ struct StatTable: Hashable {
 
 struct GameLogEntry: Identifiable, Hashable {
     let id: String
+    var league: String = ""
     let date: Date?
     let opponent: String
     let opponentLogo: URL?
@@ -53,6 +54,8 @@ struct TeamPage {
     var stats: [InfoRow]
     var injuries: [InfoRow]
     var form: [String]
+    /// Competitions the team plays in (football: league, cups, Europe).
+    var competitions: [League] = []
 }
 
 struct PlayerPage {
@@ -68,6 +71,8 @@ struct PlayerPage {
     let tables: [StatTable]
     let gameLogLabels: [String]
     let gameLog: [GameLogEntry]
+    /// Per-competition season stats (football: league / cup / Europe).
+    var competitionStats: [(name: String, rows: [InfoRow])] = []
 }
 
 // MARK: - ESPN teams / athletes
@@ -99,6 +104,44 @@ extension ESPN {
         return d["leagues"][0]["season"]["type"]["name"].string
     }
 
+    // MARK: Cups
+
+    struct CupRound: Identifiable, Hashable {
+        var id: String { label }
+        let label: String
+        let detail: String
+        let start: Date
+        let end: Date
+    }
+
+    static func cupRounds(_ league: League) async throws -> [CupRound] {
+        guard let path = league.espn, let url = URL(string: "\(site)/\(path)/scoreboard") else { return [] }
+        let d = try await HTTP.shared.json(url, maxAge: 3600)
+        return d["leagues"][0]["calendar"].array.flatMap { $0["entries"].array }.compactMap { e in
+            guard let s = ESPNDate.parse(e["startDate"].string), let en = ESPNDate.parse(e["endDate"].string) else { return nil }
+            return CupRound(label: e["label"].str.replacingOccurrences(of: "Rd of", with: "Round of"),
+                            detail: e["detail"].str, start: s, end: en)
+        }
+    }
+
+    /// Games in a cup round (fetched day by day; ESPN refuses ranges).
+    static func cupGames(_ league: League, round: CupRound) async throws -> [Game] {
+        let cal = Calendar.current
+        var days: [Date] = []
+        var d = cal.startOfDay(for: round.start)
+        while d <= round.end && days.count < 45 {
+            days.append(d)
+            d = cal.date(byAdding: .day, value: 1, to: d)!
+        }
+        return try await GameFeed.days(league, days)
+    }
+
+    /// NBA Cup season label: the Cup runs Oct–Dec.
+    static func nbaCupYear(_ now: Date = Date()) -> Int {
+        let c = Calendar.current.dateComponents([.year, .month], from: now)
+        return (c.month ?? 1) >= 9 ? (c.year ?? 2026) : (c.year ?? 2026) - 1
+    }
+
     // MARK: Team
 
     static func team(_ league: League, id: String) async throws -> TeamPage {
@@ -108,14 +151,46 @@ extension ESPN {
         async let schedJ = HTTP.shared.json(URL(string: "\(base)/schedule")!, maxAge: 300)
         async let rosterJ = HTTP.shared.json(URL(string: "\(base)/roster")!, maxAge: 3600)
         let info = (try await infoJ)["team"]
-        var events = (try? await schedJ)?["events"].array ?? []
-        if league.family == .soccer, let fx = URL(string: "\(base)/schedule?fixture=true"),
-           let more = try? await HTTP.shared.json(fx, maxAge: 300) {
-            events += more["events"].array
-        }
+        let events = (try? await schedJ)?["events"].array ?? []
         let roster = (try? await rosterJ) ?? J(nil)
 
         var games = events.map { scheduleGame($0, league: league) }
+        var competitions: [League] = [league]
+        if league.family == .soccer {
+            // The club's other competitions: domestic cup and European cups.
+            let country = league.espn?.contains("ger.") == true ? "ger" : league.espn?.contains("eng.") == true ? "eng" : ""
+            let candidates = League.all.filter { other in
+                guard other.family == .soccer, other.id != league.id, let p = other.espn else { return false }
+                return p.contains("uefa") || (!country.isEmpty && p.contains("\(country)."))
+                    && !(other.id == "bl1" || other.id == "bl2" || other.id == "epl")
+            }
+            let found = await withTaskGroup(of: (League, [J]).self) { group -> [(League, [J])] in
+                for c in candidates {
+                    group.addTask {
+                        guard let p = c.espn else { return (c, []) }
+                        var evs: [J] = []
+                        for suffix in ["", "?fixture=true"] {
+                            if let u = URL(string: "\(site)/\(p)/teams/\(id)/schedule\(suffix)"),
+                               let j = try? await HTTP.shared.json(u, maxAge: 300) { evs += j["events"].array }
+                        }
+                        return (c, evs)
+                    }
+                }
+                var out: [(League, [J])] = []
+                for await r in group { out.append(r) }
+                return out
+            }
+            if let fx = URL(string: "\(base)/schedule?fixture=true"), let more = try? await HTTP.shared.json(fx, maxAge: 300) {
+                games += more["events"].array.map { scheduleGame($0, league: league) }
+            }
+            for (c, evs) in found where !evs.isEmpty {
+                competitions.append(c)
+                games += evs.map { scheduleGame($0, league: c) }
+            }
+            competitions.sort { a, b in
+                (League.all.firstIndex(of: a) ?? 0) < (League.all.firstIndex(of: b) ?? 0)
+            }
+        }
         var seen = Set<String>()
         games = games.filter { seen.insert($0.id).inserted }.sorted { $0.date < $1.date }
 
@@ -174,7 +249,8 @@ extension ESPN {
             color: info["color"].string,
             record: recordItem["summary"].string,
             standing: info["standingSummary"].string,
-            games: games, roster: players, stats: stats, injuries: injuries, form: form
+            games: games, roster: players, stats: stats, injuries: injuries, form: form,
+            competitions: competitions
         )
     }
 
@@ -239,6 +315,10 @@ extension ESPN {
 
         var tables: [StatTable] = []
         let ovs = ov["statistics"]
+        let statNames = ovs["displayNames"].array.map(\.str)
+        let competitionStats: [(name: String, rows: [InfoRow])] = ovs["splits"].array.map { sp in
+            (sp["displayName"].str, zip(statNames, sp["stats"].array.map(\.str)).map { InfoRow(label: $0, value: $1) })
+        }
         if !ovs["labels"].array.isEmpty {
             tables.append(StatTable(
                 title: ovs["displayName"].string ?? "Stats",
@@ -267,6 +347,7 @@ extension ESPN {
                 let e = log["events"][id]
                 entries.append(GameLogEntry(
                     id: id,
+                    league: e["leagueName"].string ?? e["leagueShortName"].str,
                     date: ESPNDate.parse(e["gameDate"].string?.replacingOccurrences(of: ".000+00:00", with: "Z")),
                     opponent: e["opponent"]["abbreviation"].str,
                     opponentLogo: e["opponent"]["logo"].url,
@@ -290,7 +371,8 @@ extension ESPN {
             seasonStats: season,
             tables: tables,
             gameLogLabels: log["labels"].array.map(\.str),
-            gameLog: Array(entries.prefix(10))
+            gameLog: Array(entries.prefix(20)),
+            competitionStats: competitionStats
         )
     }
 
@@ -309,6 +391,7 @@ extension ESPN {
     /// ESPN league ids that appear in search result uids (s:..~l:<id>~a:<id>).
     private static let uidLeague: [String: String] = [
         "46": "nba", "10": "mlb", "700": "epl", "720": "bl1", "3907": "bl2", "775": "ucl",
+        "776": "uel", "20296": "uecl", "3954": "dfb", "40": "fac",
     ]
 
     static func search(_ q: String) async -> [SearchHit] {
