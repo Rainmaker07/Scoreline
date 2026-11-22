@@ -4,16 +4,19 @@ A native SwiftUI score tracker styled after Apple Sports.
 
 | League | What you get |
 |---|---|
-| NBA, MLB | Live scores (Yesterday / Today / Upcoming), line score, game leaders / pitching decisions, team stat bars, box scores, standings with playoff zones, stat leaders |
-| Basketball Bundesliga | Live scores, quarter scores, box scores, team stats, standings with playoff, play-in and relegation zones. Data from easycredit-bbl.de public pages, since ESPN doesn't cover the BBL. |
-| Premier League, Bundesliga, 2. Bundesliga, Champions League | Live scores with scorers, match timeline, team stats, lineups, live tables with labelled qualification and relegation zones, top scorers and assists |
-| ATP Grand Slams | Singles and doubles draws by round, set scores, seeds, champion, player pages |
+| NBA, MLB | Live scores (Yesterday / Today / Upcoming), line score, game leaders / pitching decisions, team stats, box scores, standings with playoff zones, stat leaders. The NBA page also has the NBA Cup (groups, wild cards, knockout). |
+| easyCredit BBL | Live scores, quarter scores, box scores, team stats, standings with playoff, play-in and relegation zones. Data from easycredit-bbl.de, since ESPN doesn't cover the BBL. |
+| Premier League, Bundesliga, 2. Bundesliga | Live scores with scorers, match events, lineups on a formation pitch, team stats, live tables with labelled zones, top scorers and assists |
+| Champions League, Europa League, Conference League | The same, with league-phase tables (Round of 16 / knockout play-offs / eliminated) |
+| DFB-Pokal, FA Cup | Results and fixtures by round, including penalties |
+| ATP | The full season: Grand Slams, Masters 1000, 500, 250, ATP Finals (group tables), Next Gen Finals, plus Davis Cup and Laver Cup from Wikipedia. Draws, live scores and ATP rankings. |
 | Cycling Grand Tours | Stages, stage results, GC after every stage, jersey holders, final classifications, stage reports, rider pages |
 
 **Everywhere:**
 * An Apple Sports-style league switcher with search and live league status.
 * Favourite teams, players and riders, with a My Teams section on Home.
 * Tap any team or player to open their page: schedule, roster, stats, game log and career.
+  Football teams and players can be filtered by competition (league, cup or European).
 
 ## Install on your iPhone (always up to date)
 
@@ -58,8 +61,8 @@ Sideloading tools such as Sideloadly or AltStore can sign it with your Apple ID 
 
 * **ESPN public JSON API** (`site.api.espn.com`): scores, summaries, standings, leaders and tennis. It's unofficial and can change without notice.
   Parsing lives in `Services/ESPN.swift`.
-* **easycredit-bbl.de:** Basketball Bundesliga games, standings, teams and players, read from the JSON embedded in its public pages.
-* **Wikipedia** (`en.wikipedia.org/api/rest_v1/page/html/…`): Grand Tour results, which are licensed CC BY-SA, plus rider and player summaries and competition logos.
+* **easycredit-bbl.de:** easyCredit BBL games, standings, teams and players, read from the JSON embedded in its public pages.
+* **Wikipedia** (`en.wikipedia.org/api/rest_v1/page/html/…`): Grand Tour results, NBA Cup groups, Davis Cup and Laver Cup results, football player photos (ESPN has none), rider and player summaries and competition logos, all licensed CC BY-SA.
   Logos are loaded at runtime and are never stored in the repository.
   The app reads the edition article (for example "2026 Tour de France") and its stage articles ("…, Stage 1 to Stage 11").
   Parsing lives in `Services/WikiHTML.swift` and `Services/Cycling.swift`.
