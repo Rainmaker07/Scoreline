@@ -1,0 +1,200 @@
+import SwiftUI
+
+/// One league's page: scores card, then standings and stat leaders below.
+struct LeaguePage: View {
+    let league: League
+    var refresh = 0
+    @Binding var openGame: Game?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            ScoresCard(league: league, refresh: refresh, openGame: $openGame)
+            SectionHeader(title: league.id == "ucl" ? "League Phase" : "Standings")
+            StandingsSection(league: league, refresh: refresh)
+            if league.hasStatLeaders {
+                SectionHeader(title: "Stat Leaders")
+                LeadersSection(league: league, refresh: refresh, limit: 10)
+            }
+        }
+    }
+}
+
+struct SectionHeader: View {
+    let title: String
+    var body: some View {
+        Text(title)
+            .font(.title2.weight(.bold))
+            .padding(.horizontal, 4)
+            .padding(.top, 6)
+    }
+}
+
+/// Home: your teams first, then every league with games today.
+struct HomeView: View {
+    var refresh: Int
+    @Binding var openGame: Game?
+    let go: (String) -> Void
+    @EnvironmentObject private var store: AppStore
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            let teams = store.favorites.filter { $0.kind == .team }
+            if !teams.isEmpty {
+                FavoritesStrip(favorites: teams)
+                SectionHeader(title: "My Teams")
+                MyTeamsCard(favorites: teams, refresh: refresh, openGame: $openGame)
+            } else {
+                NavigationLink(value: Route.favorites) {
+                    HStack(spacing: 12) {
+                        Image(systemName: "star.circle.fill").font(.title).foregroundStyle(.yellow)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Add your teams").font(.headline)
+                            Text("Follow teams to see their games first.").font(.footnote).foregroundStyle(Theme.secondary)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right").foregroundStyle(Theme.secondary)
+                    }
+                    .card()
+                }
+                .buttonStyle(.plain)
+            }
+            ForEach(store.visibleLeagues.filter(\.isTeamSport)) { l in
+                TodaySection(league: l, refresh: refresh, openGame: $openGame) { go(l.id) }
+            }
+            SectionHeader(title: "More Sports")
+            HStack(spacing: 10) {
+                moreCard(league: League.byId("atp")!, subtitle: "Grand Slam draws & results")
+                moreCard(league: League.byId("cycling")!, subtitle: "Stages & classifications")
+            }
+        }
+    }
+
+    private func moreCard(league: League, subtitle: String) -> some View {
+        Button { go(league.id) } label: {
+            VStack(alignment: .leading, spacing: 6) {
+                LeagueIcon(league: league, size: 34)
+                Text(league.name).font(.headline.weight(.heavy))
+                Text(subtitle).font(.footnote).foregroundStyle(Theme.secondary)
+            }
+            .card()
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+/// A league's games today on the home screen (hidden when there are none).
+struct TodaySection: View {
+    let league: League
+    var refresh = 0
+    @Binding var openGame: Game?
+    let open: () -> Void
+
+    var body: some View {
+        Loader(id: "home-\(league.id)-\(refresh)",
+               poll: { (games: [Game]) in games.contains(where: { $0.state == .live }) ? 20 : 180 },
+               load: { try await GameFeed.load(league, tab: .today) }) { games in
+            if !games.isEmpty {
+                VStack(alignment: .leading, spacing: 10) {
+                    Button(action: open) {
+                        HStack(spacing: 10) {
+                            LeagueIcon(league: league, size: 24)
+                            Text(league.name).font(.title3.weight(.bold))
+                            let live = games.filter { $0.state == .live }.count
+                            if live > 0 {
+                                HStack(spacing: 5) { LivePulse(); Text("\(live) live") }
+                                    .font(.footnote.weight(.semibold))
+                                    .foregroundStyle(Theme.live)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(Theme.secondary)
+                        }
+                        .padding(.horizontal, 4)
+                    }
+                    .buttonStyle(.plain)
+                    GameList(games: games, openGame: $openGame)
+                        .padding(.horizontal, 14)
+                        .background(Theme.card, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+                }
+            }
+        }
+    }
+}
+
+/// Circular logos of followed teams, like Apple Sports' My Teams row.
+struct FavoritesStrip: View {
+    let favorites: [Favorite]
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 14) {
+                ForEach(favorites) { f in
+                    NavigationLink(value: Route.team(leagueId: f.leagueId, teamId: f.entityId)) {
+                        VStack(spacing: 6) {
+                            LogoView(url: f.logo, fallback: f.abbr, size: 36)
+                                .frame(width: 58, height: 58)
+                                .background(Theme.card, in: Circle())
+                            Text(f.abbr.isEmpty ? f.name : f.abbr).font(.caption2.weight(.semibold)).lineLimit(1)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+                NavigationLink(value: Route.favorites) {
+                    VStack(spacing: 6) {
+                        Image(systemName: "pencil").font(.title3)
+                            .frame(width: 58, height: 58)
+                            .background(Theme.card, in: Circle())
+                        Text("Edit").font(.caption2.weight(.semibold))
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+}
+
+/// Today's game for each followed team, or its last result and next game.
+struct MyTeamsCard: View {
+    let favorites: [Favorite]
+    var refresh = 0
+    @Binding var openGame: Game?
+
+    var body: some View {
+        Loader(id: "myteams-\(favorites.map(\.id).joined())-\(refresh)",
+               poll: { (games: [Game]) in games.contains(where: { $0.state == .live }) ? 30 : 300 },
+               load: { await Self.load(favorites) }) { games in
+            if games.isEmpty {
+                MessageCard(text: "No recent or upcoming games for your teams.")
+            } else {
+                GameList(games: games, openGame: $openGame)
+                    .padding(.horizontal, 14)
+                    .background(Theme.card, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+            }
+        }
+    }
+
+    static func load(_ favorites: [Favorite]) async -> [Game] {
+        var out: [Game] = []
+        var seen = Set<String>()
+        for f in favorites {
+            guard let league = f.league else { continue }
+            let games: [Game]
+            if league.provider == .bbl {
+                games = (try? await BBL.team(f.entityId).games) ?? []
+            } else {
+                games = (try? await ESPN.team(league, id: f.entityId).games) ?? []
+            }
+            let today = games.filter { Calendar.current.isDateInToday($0.date) }
+            var pick = today
+            if pick.isEmpty {
+                if let last = games.last(where: { $0.state == .post }) { pick.append(last) }
+                if let next = games.first(where: { $0.state != .post && $0.date > Date().addingTimeInterval(-3 * 3600) }) { pick.append(next) }
+            }
+            // Live scores come from the scoreboard (team schedules lag behind).
+            if league.provider == .espn, pick.contains(where: { Calendar.current.isDateInToday($0.date) }),
+               let board = try? await ESPN.scoreboard(league, date: Date()) {
+                pick = pick.map { g in board.first { $0.id == g.id } ?? g }
+            }
+            for g in pick where seen.insert(g.id).inserted { out.append(g) }
+        }
+        return out.sorted { ($0.state.sortRank, $0.date) < ($1.state.sortRank, $1.date) }
+    }
+}

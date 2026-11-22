@@ -1,0 +1,10 @@
+# Xcode
+ios/build/
+ios/Payload/
+*.ipa
+xcuserdata/
+DerivedData/
+.DS_Store
+
+# Personal signing settings (created by ios/scripts/setup-mac.sh)
+ios/Config/Local.xcconfig
