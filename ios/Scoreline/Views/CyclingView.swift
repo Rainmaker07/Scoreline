@@ -74,7 +74,7 @@ struct JerseyBadge: View {
     }
 }
 
-private struct EditionBody: View {
+struct EditionBody: View {
     let edition: Edition
     @State private var tab = 0
     @State private var jersey: JerseyKey = .gc
