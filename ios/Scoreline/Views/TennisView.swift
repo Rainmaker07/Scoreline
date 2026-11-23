@@ -188,7 +188,13 @@ struct TournamentView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 if let wiki = t.wikiTitle {
-                    WikiEventView(title: wiki, finished: Date() > t.end)
+                    if wiki.contains("Laver") {
+                        LaverCupView(year: Calendar.current.component(.year, from: t.start), finished: Date() > t.end)
+                    } else if wiki.contains("Davis") {
+                        DavisCupView(title: wiki, finished: Date() > t.end)
+                    } else {
+                        WikiEventView(title: wiki, finished: Date() > t.end)
+                    }
                 } else {
                     Loader(id: "\(t.id)-\(draw)",
                            poll: { (ev: TennisEvent?) in (ev?.matches.contains(where: { $0.state == .live }) ?? false) ? 30 : nil },

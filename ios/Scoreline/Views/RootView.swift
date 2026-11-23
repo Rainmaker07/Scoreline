@@ -149,7 +149,12 @@ struct LeagueIcon: View {
     let league: League
     var size: CGFloat = 24
     var body: some View {
-        if let logo = league.logo {
+        if let logo = league.logo, league.id == "atp" || league.id == "cycling" {
+            // Dark logos: show them on a light badge so they're visible on the dark UI.
+            LogoView(url: logo, fallback: league.short, size: size * 0.8)
+                .frame(width: size, height: size)
+                .background(Color.white, in: RoundedRectangle(cornerRadius: size * 0.22, style: .continuous))
+        } else if let logo = league.logo {
             LogoView(url: logo, fallback: league.short, size: size)
         } else {
             Image(systemName: league.glyph ?? "sportscourt")
