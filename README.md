@@ -1,5 +1,7 @@
 # Scoreline for iPhone
 
+**Version 1.4 (build 5)**. The installed version is shown under Settings → About.
+
 A native SwiftUI score tracker styled after Apple Sports.
 
 | League | What you get |
@@ -28,6 +30,18 @@ A native SwiftUI score tracker styled after Apple Sports.
 * **How updates arrive now:** they're local. While the app is open it checks every minute; while it's closed, iOS background refresh decides when it may check (typically every 15–60 minutes). Start reminders are scheduled ahead and are always on time.
 * **Real time later:** `Services/Alerts.swift` defines an `AlertBackend` protocol. A future server-backed implementation (paid Apple Developer account + a small server such as a Cloudflare Worker sending APNs pushes) would receive the same `AlertSubscription` list and the Live Activity push tokens. The Live Activity's `ContentState` is already push-compatible.
 * The Live Activity lives in a widget extension (`ios/ScorelineWidgets`). Code shared by the app and the extension is in `ios/Shared`.
+
+## Version history
+
+| Version | Changes |
+|---|---|
+| 1.4 (5) | Notifications and Live Activities for followed teams and competitions; version number in Settings |
+| 1.3 (4) | Premiership Rugby, NBA Cup page, Stats tabs, all UCI WorldTour races, rider and team pages, tournament logos, Davis Cup and Laver Cup, rankings with flags and photos, expandable league menu |
+| 1.2 (3) | easyCredit BBL rename, iPhone 13 layout fixes, player photos for stat leaders, game detail tabs with formations, ATP 1000/500/250, ATP Finals and rankings, Europa League, Conference League, DFB-Pokal, FA Cup, NBA Cup |
+| 1.1 (2) | Live standings with zones, favourites, team and player pages, league switcher, logos, Basketball Bundesliga |
+| 1.0 (1) | First version: NBA, MLB, Premier League, Bundesliga, 2. Bundesliga, Champions League, Grand Slams, Grand Tours |
+
+The version is set in `ios/Config/Base.xcconfig` (`MARKETING_VERSION` and the build number `CURRENT_PROJECT_VERSION`) and is raised with every update.
 
 ## Install on your iPhone (always up to date)
 

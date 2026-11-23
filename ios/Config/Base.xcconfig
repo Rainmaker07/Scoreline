@@ -4,6 +4,11 @@
 // It is git-ignored, so updating the project never touches it.
 // ios/scripts/setup-mac.sh creates it; you can also copy Local.xcconfig.example.
 
+// App version, shown in Settings and the README. Bump both with every update:
+// MARKETING_VERSION for the release, CURRENT_PROJECT_VERSION (build) by one.
+MARKETING_VERSION = 1.4
+CURRENT_PROJECT_VERSION = 5
+
 PRODUCT_BUNDLE_IDENTIFIER = com.rainmaker07.scoreline
 CODE_SIGN_STYLE = Automatic
 DEVELOPMENT_TEAM =

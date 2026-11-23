@@ -388,6 +388,9 @@ struct SettingsView: View {
                 }
                 .font(.footnote)
                 .foregroundStyle(Theme.secondary)
+                Section("About") {
+                    LabeledContent("Version", value: AppVersion.display)
+                }
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
@@ -496,5 +499,14 @@ struct RouteView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar(.visible, for: .navigationBar)
         }
+    }
+}
+
+enum AppVersion {
+    static var display: String {
+        let info = Bundle.main.infoDictionary
+        let version = info?["CFBundleShortVersionString"] as? String ?? "?"
+        let build = info?["CFBundleVersion"] as? String ?? "?"
+        return "\(version) (\(build))"
     }
 }
