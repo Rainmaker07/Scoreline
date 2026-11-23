@@ -88,7 +88,7 @@ enum DataChecks {
             return "\(g.home.abbr) v \(g.away.abbr): lineups OK"
         }
         for id in ["nba", "mlb", "epl", "bl1"] {
-            let l = league(id)
+            let l = dcLeague(id)
             add("ESPN", "\(l.short) stat leaders") {
                 let cats = try await ESPN.leaders(l)
                 try dcExpect(!cats.isEmpty, "no categories")
