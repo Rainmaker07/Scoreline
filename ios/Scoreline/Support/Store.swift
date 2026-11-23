@@ -82,4 +82,7 @@ enum Route: Hashable {
     case tournament(TournamentSummary)
     case wiki(title: String, name: String)
     case league(String)
+    case nbaCup
+    case cyclingRace(WTRace)
+    case cyclingTeam(String)
 }

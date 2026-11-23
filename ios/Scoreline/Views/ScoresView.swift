@@ -29,19 +29,25 @@ struct LeaguePage: View {
     let league: League
     var refresh = 0
     @Binding var openGame: Game?
+    /// Standings (0) or Stats (1), remembered per league.
+    @AppStorage private var tab: Int
+
+    init(league: League, refresh: Int = 0, openGame: Binding<Game?>) {
+        self.league = league
+        self.refresh = refresh
+        self._openGame = openGame
+        self._tab = AppStorage(wrappedValue: 0, "leagueTab-\(league.id)")
+    }
 
     var body: some View {
+        let firstTitle = league.isCup ? "Rounds" : league.isUEFA ? "League Phase" : "Standings"
         VStack(alignment: .leading, spacing: 18) {
             ScoresCard(league: league, refresh: refresh, openGame: $openGame)
             if league.id == "nba" {
-                let year = ESPN.nbaCupYear()
-                NavigationLink(value: Route.wiki(title: "\(year) NBA Cup", name: "NBA Cup \(year)")) {
+                NavigationLink(value: Route.nbaCup) {
                     HStack(spacing: 12) {
-                        Image(systemName: "trophy.fill").font(.title2).foregroundStyle(.yellow)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("NBA Cup \(year)").font(.headline)
-                            Text("Groups, wild cards and knockout bracket").font(.footnote).foregroundStyle(Theme.secondary)
-                        }
+                        LogoView(url: LogoAssets.nbaCup, fallback: "Cup", size: 40)
+                        Text("NBA Cup").font(.headline)
                         Spacer()
                         Image(systemName: "chevron.right").foregroundStyle(Theme.secondary)
                     }
@@ -49,16 +55,21 @@ struct LeaguePage: View {
                 }
                 .buttonStyle(.plain)
             }
-            if league.isCup {
-                SectionHeader(title: "Rounds")
+            if league.hasStatLeaders {
+                Picker("", selection: $tab) {
+                    Text(firstTitle).tag(0)
+                    Text("Stats").tag(1)
+                }
+                .pickerStyle(.segmented)
+            } else {
+                SectionHeader(title: firstTitle)
+            }
+            if league.hasStatLeaders && tab == 1 {
+                LeadersSection(league: league, refresh: refresh)
+            } else if league.isCup {
                 CupRoundsSection(league: league, refresh: refresh, openGame: $openGame)
             } else {
-                SectionHeader(title: league.isUEFA ? "League Phase" : "Standings")
                 StandingsSection(league: league, refresh: refresh)
-            }
-            if league.hasStatLeaders {
-                SectionHeader(title: "Stat Leaders")
-                LeadersSection(league: league, refresh: refresh, limit: 10)
             }
         }
     }
@@ -86,7 +97,7 @@ struct CupRoundsSection: View {
                            poll: { (games: [Game]) in games.contains(where: { $0.state == .live }) ? 20 : nil },
                            load: { try await ESPN.cupGames(league, round: round) }) { games in
                         if games.isEmpty {
-                            MessageCard(text: "Draw not made yet.")
+                            MessageCard(text: round.start > Date() ? "Draw not made yet." : "No results found for this round.")
                         } else {
                             GameList(games: games, openGame: $openGame, showDayHeaders: true)
                                 .padding(.horizontal, 14)

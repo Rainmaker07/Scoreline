@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 
 // MARK: - Tournament tiers
 
@@ -52,6 +53,79 @@ enum TennisTier: String, CaseIterable, Hashable {
                     "citi dc open", "citi open", "china open", "japan open", "swiss indoors", "erste bank open"]
         if five.contains(where: n.contains) { return .t500 }
         return .t250
+    }
+}
+
+// MARK: - Tournament logos
+
+enum TournamentLogos {
+    /// ESPN's sponsor names -> Wikipedia article (whose lead image is the logo).
+    private static let titles: [(String, String)] = [
+        ("bnp paribas open", "Indian Wells Open"), ("miami open", "Miami Open"), ("monte-carlo", "Monte-Carlo Masters"),
+        ("madrid open", "Madrid Open"), ("internazionali", "Italian Open (tennis)"), ("banque nationale", "Canadian Open (tennis)"),
+        ("national bank open", "Canadian Open (tennis)"), ("cincinnati", "Cincinnati Open"), ("shanghai", "Shanghai Masters (tennis)"),
+        ("paris masters", "Paris Masters"), ("next gen", "Next Generation ATP Finals"), ("atp finals", "ATP Finals"),
+        ("abn amro", "Rotterdam Open"), ("rio open", "Rio Open"), ("dallas open", "Dallas Open"),
+        ("dubai", "Dubai Tennis Championships"), ("qatar", "Qatar Open (tennis)"), ("abierto mexicano", "Mexican Open (tennis)"),
+        ("barcelona open", "Barcelona Open (tennis)"), ("bmw open", "Bavarian International Tennis Championships"),
+        ("hamburg open", "Hamburg European Open"), ("terra wortmann", "Halle Open"), ("hsbc championships", "Queen's Club Championships"),
+        ("citi dc open", "Washington Open (tennis)"), ("china open", "China Open (tennis)"), ("japan open", "Japan Open (tennis)"),
+        ("swiss indoors", "Swiss Indoors"), ("erste bank", "Vienna Open"), ("brisbane", "Brisbane International"),
+        ("asb classic", "ASB Classic"), ("hong kong", "Hong Kong Open (tennis)"), ("adelaide", "Adelaide International (tennis)"),
+        ("occitanie", "Open Sud de France"), ("argentina open", "Argentina Open"), ("delray beach", "Delray Beach Open"),
+        ("chile open", "Chile Open (tennis)"), ("clay court", "U.S. Men's Clay Court Championships"),
+        ("hassan ii", "Grand Prix Hassan II"), ("tiriac", "Romanian Open"), ("geneva open", "Geneva Open"),
+        ("boss open", "Stuttgart Open"), ("libéma", "Rosmalen Grass Court Championships"), ("eastbourne", "Eastbourne International"),
+        ("mallorca", "Mallorca Championships"), ("nordea", "Swedish Open"), ("gstaad", "Swiss Open Gstaad"),
+        ("umag", "Croatia Open"), ("generali open", "Austrian Open Kitzbühel"), ("estoril", "Estoril Open"),
+        ("mifel", "Los Cabos Open"), ("winston-salem", "Winston-Salem Open"), ("chengdu", "Chengdu Open"),
+        ("hangzhou", "Hangzhou Open"), ("european open", "European Open (tennis)"), ("almaty", "Almaty Open"),
+        ("auvergne", "Lyon Open (tennis)"), ("stockholm", "Stockholm Open"), ("davis cup", "Davis Cup"), ("laver cup", "Laver Cup"),
+    ]
+
+    static func wikiTitle(_ name: String) -> String {
+        let n = name.lowercased()
+        return titles.first { n.contains($0.0) }?.1 ?? name
+    }
+
+    private static var cache: [String: URL?] = [:]
+
+    static func logo(_ t: TournamentSummary) async -> URL? {
+        if t.tier == .slam, let slam = Slam.all.first(where: { t.name.lowercased().contains($0.name.split(separator: " ").first!.lowercased()) }) {
+            return LogoAssets.slam(slam.id)
+        }
+        let title = wikiTitle(t.name)
+        if let hit = cache[title] { return hit }
+        let url = await Wiki.summary(title)?.image
+        cache[title] = url
+        return url
+    }
+}
+
+/// Tournament logo, loaded from the tournament's Wikipedia article.
+struct TournamentLogo: View {
+    let t: TournamentSummary
+    var size: CGFloat = 34
+    @State private var url: URL?
+    @State private var loaded = false
+
+    var body: some View {
+        ZStack {
+            if let url {
+                LogoView(url: url, fallback: t.name, size: size)
+                    .padding(3)
+                    .background(Color.white, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+            } else {
+                Image(systemName: t.tier == .team ? "flag.2.crossed.fill" : "tennisball.fill")
+                    .font(.system(size: size * 0.5))
+                    .foregroundStyle(Color(hex: t.tier.color))
+            }
+        }
+        .frame(width: size + 6, height: size + 6)
+        .task(id: t.id) {
+            url = await TournamentLogos.logo(t)
+            loaded = true
+        }
     }
 }
 
@@ -152,15 +226,18 @@ enum Tennis {
         let ranks = d["rankings"].array.first { $0["type"].str == "atp" || $0["name"].str == "ATP" } ?? d["rankings"][0]
         return ranks["ranks"].array.map { r in
             let a = r["athlete"]
+            // In the rankings feed, flag and headshot are plain URLs (in draws they're objects).
+            let id = a["id"].str
             return RankingEntry(
                 rank: r["current"].int ?? 0,
                 previous: r["previous"].int,
                 points: r["points"].double ?? 0,
-                playerId: a["id"].str,
+                playerId: id,
                 name: a["displayName"].str,
-                flag: a["flag"]["href"].url,
-                country: a["flag"]["alt"].string,
-                headshot: a["headshot"]["href"].url
+                flag: a["flag"].url ?? a["flag"]["href"].url,
+                country: a["flag"]["alt"].string ?? a["citizenship"].string,
+                headshot: a["headshot"].url ?? a["headshot"]["href"].url
+                    ?? URL(string: "https://a.espncdn.com/i/headshots/tennis/players/full/\(id).png")
             )
         }
     }

@@ -106,7 +106,10 @@ struct CyclingStage: Identifiable, Hashable {
     var gcAfter: [RiderResult] = []
     var report: [String] = []
 
-    var route: String { start == finish || finish.isEmpty ? start : "\(start) → \(finish)" }
+    var route: String {
+        func short(_ s: String) -> String { s.replacingOccurrences(of: #"\s*\([^)]*\)"#, with: "", options: .regularExpression) }
+        return start == finish || finish.isEmpty ? short(start) : "\(short(start)) → \(short(finish))"
+    }
     var isRaced: Bool { winner != nil && !(winner ?? "").isEmpty }
 }
 

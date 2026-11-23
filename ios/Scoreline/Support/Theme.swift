@@ -238,4 +238,5 @@ struct MessageCard: View {
 enum Fmt {
     static func time(_ d: Date) -> String { d.formatted(date: .omitted, time: .shortened) }
     static func day(_ d: Date) -> String { d.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day()) }
+    static func dayOnly(_ d: Date) -> String { d.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day()) }
 }

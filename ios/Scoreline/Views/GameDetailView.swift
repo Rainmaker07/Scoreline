@@ -168,7 +168,8 @@ private struct GameDetailContent: View {
         let left = g.ordered.left
         let right = g.ordered.right
         let soccer = league.family == .soccer
-        let tabs: [DetailTab] = soccer ? [.events, .lineups, .stats] : [.summary, .box, .stats]
+        let rugby = league.family == .rugby
+        let tabs: [DetailTab] = rugby ? [.events, .lineups] : soccer ? [.events, .lineups, .stats] : [.summary, .box, .stats]
         let current = tab ?? tabs[0]
         VStack(spacing: 14) {
             GameHero(game: g, left: left, right: right, note: g.note ?? comp["series"]["summary"].string,
@@ -176,6 +177,11 @@ private struct GameDetailContent: View {
             Group {
                 DetailTabs(tabs: tabs, selection: Binding(get: { current }, set: { tab = $0 }))
                 switch current {
+                case .events where rugby:
+                    RugbyEventsCard(game: game, homeId: g.home.id)
+                    GameInfoCard(summary: summary)
+                case .lineups where rugby:
+                    RugbyLineupsCard(summary: summary, left: left, right: right)
                 case .events:
                     TimelineCard(league: league, summary: summary, homeId: g.home.id)
                     if summary["keyEvents"].array.isEmpty && g.state == .pre {
@@ -724,6 +730,88 @@ private struct DecisionsCard: View {
             }
             .card()
         }
+    }
+}
+
+// MARK: - Rugby
+
+private struct RugbyEventsCard: View {
+    let game: Game
+    let homeId: String
+
+    var body: some View {
+        if game.events.isEmpty {
+            MessageCard(text: game.state == .pre ? "Tries, conversions and penalties appear here once the match starts." : "No scoring details available.")
+        } else {
+            VStack(alignment: .leading, spacing: 0) {
+                CardTitle("Scoring")
+                ForEach(Array(game.events.enumerated()), id: \.offset) { i, e in
+                    if i > 0 { Divider().overlay(Theme.separator) }
+                    let isHome = e.teamId == homeId
+                    let content = VStack(alignment: isHome ? .trailing : .leading, spacing: 1) {
+                        Text(e.player).font(.subheadline.weight(.semibold)).lineLimit(1).minimumScaleFactor(0.75)
+                        Text(e.kind).font(.caption).foregroundStyle(e.kind == "Try" ? Theme.win : Theme.secondary)
+                    }
+                    HStack {
+                        Group { if isHome { content } else { Color.clear } }.frame(maxWidth: .infinity, alignment: .trailing)
+                        Text(e.minute).font(.footnote.weight(.bold)).foregroundStyle(Theme.secondary).frame(width: 44)
+                        Group { if !isHome { content } else { Color.clear } }.frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .padding(.vertical, 8)
+                }
+            }
+            .card()
+        }
+    }
+}
+
+private struct RugbyLineupsCard: View {
+    let summary: J
+    let left: Side
+    let right: Side
+
+    var body: some View {
+        let rosters = summary["rosters"].array
+        let l = rosters.first { $0["team"]["id"].str == left.id }
+        let r = rosters.first { $0["team"]["id"].str == right.id }
+        if let l, let r, !l["roster"].array.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                CardTitle("Lineups")
+                HStack(alignment: .top, spacing: 14) {
+                    column(l, left)
+                    column(r, right)
+                }
+            }
+            .card()
+        } else {
+            MessageCard(text: "Lineups are announced a couple of days before kick-off.")
+        }
+    }
+
+    private func column(_ r: J, _ s: Side) -> some View {
+        let players = r["roster"].array.sorted { (Int($0["jersey"].str) ?? 99) < (Int($1["jersey"].str) ?? 99) }
+        return VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 6) {
+                LogoView(url: s.logo, fallback: s.abbr, size: 18)
+                Text(s.short).font(.subheadline.weight(.bold)).lineLimit(1)
+            }
+            .padding(.bottom, 6)
+            ForEach(Array(players.enumerated()), id: \.offset) { _, p in
+                let n = Int(p["jersey"].str) ?? 99
+                if n == 16 {
+                    Text("REPLACEMENTS").font(.system(size: 9, weight: .bold)).foregroundStyle(Theme.secondary).padding(.top, 8)
+                }
+                HStack(spacing: 6) {
+                    Text(p["jersey"].str).foregroundStyle(Theme.secondary).frame(width: 20, alignment: .trailing)
+                    Text(p["athlete"]["shortName"].string ?? p["athlete"]["displayName"].str)
+                        .lineLimit(1).minimumScaleFactor(0.8)
+                        .foregroundStyle(n > 15 ? Theme.secondary : .white)
+                }
+                .font(.caption)
+                .padding(.vertical, 4)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

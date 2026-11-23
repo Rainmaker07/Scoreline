@@ -1,7 +1,29 @@
 import Foundation
 
-enum Family: String {
-    case basketball, baseball, soccer, tennis, cycling
+enum Family: String, CaseIterable {
+    case basketball, baseball, soccer, rugby, tennis, cycling
+
+    var title: String {
+        switch self {
+        case .basketball: return "Basketball"
+        case .baseball: return "Baseball"
+        case .soccer: return "Football"
+        case .rugby: return "Rugby"
+        case .tennis: return "Tennis"
+        case .cycling: return "Cycling"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .basketball: return "basketball.fill"
+        case .baseball: return "baseball.fill"
+        case .soccer: return "soccerball"
+        case .rugby: return "football.fill"
+        case .tennis: return "tennisball.fill"
+        case .cycling: return "bicycle"
+        }
+    }
 }
 
 /// Where a league's data comes from.
@@ -28,7 +50,21 @@ struct League: Identifiable, Hashable {
     var isCup: Bool { id == "dfb" || id == "fac" }
     /// UEFA league-phase competitions.
     var isUEFA: Bool { espn?.hasPrefix("soccer/uefa") == true }
-    var hasStatLeaders: Bool { provider == .espn }
+    var hasStatLeaders: Bool { provider == .espn && family != .rugby }
+
+    /// Short form for the header pill when the full name doesn't fit.
+    var pillShort: String {
+        switch id {
+        case "epl": return "PL"
+        case "ucl": return "UCL"
+        case "uel": return "UEL"
+        case "uecl": return "UECL"
+        case "bl2": return "2. BL"
+        case "bbl": return "BBL"
+        case "prem": return "PREM"
+        default: return short
+        }
+    }
 
     static let all: [League] = [
         League(id: "nba", name: "NBA", short: "NBA", family: .basketball, provider: .espn, espn: "basketball/nba",
@@ -54,9 +90,12 @@ struct League: Identifiable, Hashable {
                logo: URL(string: "https://a.espncdn.com/i/leaguelogos/soccer/500-dark/2061.png"), glyph: nil, color: "2d5a27"),
         League(id: "fac", name: "FA Cup", short: "FA Cup", family: .soccer, provider: .espn, espn: "soccer/eng.fa",
                logo: URL(string: "https://a.espncdn.com/i/leaguelogos/soccer/500-dark/40.png"), glyph: nil, color: "8a1538"),
-        League(id: "atp", name: "Men's Tennis", short: "ATP", family: .tennis, provider: .tennis, espn: "tennis/atp",
+        League(id: "prem", name: "Premiership Rugby", short: "Premiership", family: .rugby, provider: .espn, espn: "rugby/267979",
+               logo: URL(string: "https://a.espncdn.com/guid/b207ec86-a61d-31fc-8834-4777d50755aa/logos/default-dark.png"),
+               glyph: "football.fill", color: "1d3c34"),
+        League(id: "atp", name: "ATP World Tour", short: "ATP", family: .tennis, provider: .tennis, espn: "tennis/atp",
                logo: LogoAssets.atp, glyph: "tennis.racket", color: "1b4d3e"),
-        League(id: "cycling", name: "Grand Tours", short: "Cycling", family: .cycling, provider: .cycling, espn: nil,
+        League(id: "cycling", name: "UCI World Tour", short: "UCI World Tour", family: .cycling, provider: .cycling, espn: nil,
                logo: LogoAssets.uciWorldTour, glyph: "bicycle", color: "5a4a00"),
     ]
 

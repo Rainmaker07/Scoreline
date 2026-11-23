@@ -87,7 +87,8 @@ struct RootView: View {
             Text("Scoreline")
                 .font(.system(size: 34, weight: .heavy))
                 .lineLimit(1)
-                .minimumScaleFactor(0.7)
+                .minimumScaleFactor(0.6)
+                .layoutPriority(0)
             Spacer(minLength: 12)
             Button {
                 withAnimation(.spring(response: 0.32, dampingFraction: 0.85)) { menuOpen.toggle() }
@@ -95,7 +96,10 @@ struct RootView: View {
                 HStack(spacing: 8) {
                     if let league {
                         LeagueIcon(league: league, size: 22)
-                        Text(league.short).lineLimit(1)
+                        ViewThatFits(in: .horizontal) {
+                            Text(league.short).lineLimit(1)
+                            Text(league.pillShort).lineLimit(1)
+                        }
                     } else {
                         Image(systemName: "house.fill")
                         Text("Home")
@@ -108,6 +112,7 @@ struct RootView: View {
                 .overlay(Capsule().stroke(.white.opacity(0.18), lineWidth: 1))
             }
             .buttonStyle(.plain)
+            .layoutPriority(1)
         }
         .padding(.top, 8)
     }
@@ -121,6 +126,7 @@ struct RootView: View {
                 CyclingView(refresh: refresh)
             default:
                 LeaguePage(league: league, refresh: refresh, openGame: $openGame)
+                    .id(league.id)
             }
         } else {
             HomeView(refresh: refresh, openGame: $openGame) { selected = $0 }
@@ -187,8 +193,19 @@ struct LeagueMenu: View {
                     item(icon: AnyView(Image(systemName: "magnifyingglass").font(.body)), title: "Search", subtitle: nil, on: false) { onSheet(.search) }
                     item(icon: AnyView(Image(systemName: "house.fill").font(.body)), title: "Home", subtitle: nil, on: selected == "home") { onSelect("home") }
                     item(icon: AnyView(Image(systemName: "star.fill").font(.body)), title: "My Teams", subtitle: nil, on: false) { onMyTeams() }
-                    ForEach(store.visibleLeagues) { l in
-                        item(icon: AnyView(LeagueIcon(league: l, size: 22)), title: l.name, subtitle: l, on: selected == l.id) { onSelect(l.id) }
+                    ForEach(sportGroups) { g in
+                        if g.leagues.count == 1, let l = g.leagues.first {
+                            item(icon: AnyView(LeagueIcon(league: l, size: 22)), title: l.name, subtitle: l, on: selected == l.id) { onSelect(l.id) }
+                        } else {
+                            sportHeader(g)
+                            if isExpanded(g) {
+                                ForEach(g.leagues) { l in
+                                    item(icon: AnyView(LeagueIcon(league: l, size: 20)), title: l.name, subtitle: l, on: selected == l.id) { onSelect(l.id) }
+                                        .padding(.leading, 18)
+                                        .transition(.opacity.combined(with: .move(edge: .top)))
+                                }
+                            }
+                        }
                     }
                 }
                 .padding(.horizontal, 8)
@@ -200,6 +217,59 @@ struct LeagueMenu: View {
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(.white.opacity(0.15), lineWidth: 1))
         .shadow(color: .black.opacity(0.4), radius: 30, y: 10)
+    }
+
+    @AppStorage("expandedSports") private var expandedRaw = ""
+
+    struct SportGroup: Identifiable {
+        let family: Family
+        let leagues: [League]
+        var id: String { family.rawValue }
+    }
+
+    private var sportGroups: [SportGroup] {
+        var order: [Family] = []
+        var map: [Family: [League]] = [:]
+        for l in store.visibleLeagues {
+            if map[l.family] == nil { order.append(l.family) }
+            map[l.family, default: []].append(l)
+        }
+        return order.map { SportGroup(family: $0, leagues: map[$0] ?? []) }
+    }
+
+    private func isExpanded(_ g: SportGroup) -> Bool {
+        expandedRaw.split(separator: ",").contains(Substring(g.family.rawValue)) || g.leagues.contains { $0.id == selected }
+    }
+
+    private func sportHeader(_ g: SportGroup) -> some View {
+        let open = isExpanded(g)
+        return Button {
+            withAnimation(.snappy) {
+                var set = Set(expandedRaw.split(separator: ",").map(String.init))
+                if open { set.remove(g.family.rawValue) } else { set.insert(g.family.rawValue) }
+                expandedRaw = set.sorted().joined(separator: ",")
+            }
+        } label: {
+            HStack(spacing: 11) {
+                Image(systemName: g.family.symbol).font(.body).frame(width: 24)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(g.family.title).font(.body.weight(.semibold))
+                    if !open {
+                        Text(g.leagues.map(\.short).joined(separator: " · "))
+                            .font(.caption.weight(.semibold)).foregroundStyle(Theme.secondary).lineLimit(1)
+                    }
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(Theme.secondary)
+                    .rotationEffect(.degrees(open ? 90 : 0))
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     private func item(icon: AnyView, title: String, subtitle: League?, on: Bool, action: @escaping () -> Void) -> some View {
@@ -396,13 +466,19 @@ struct RouteView: View {
         case .tennisPlayer(let id, let name):
             TennisPlayerView(id: id, name: name)
         case .rider(let name):
-            RiderView(name: name)
+            RiderPageView(name: name)
+        case .cyclingRace(let race):
+            RaceView(race: race)
+        case .cyclingTeam(let name):
+            CyclingTeamView(name: name)
         case .favorites:
             FavoritesView()
         case .game(let game):
             GameDetailView(game: game, embedded: true)
         case .tournament(let t):
             TournamentView(t: t)
+        case .nbaCup:
+            NBACupView()
         case .league(let id):
             LeagueScreen(league: League.byId(id)!)
         case .wiki(let title, let name):

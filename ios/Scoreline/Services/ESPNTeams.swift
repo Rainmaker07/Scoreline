@@ -96,12 +96,21 @@ extension ESPN {
         let live = events.filter { $0["status"]["type"]["state"].str == "in" }.count
         if live > 0 { return "\(live) live" }
         let dates = events.compactMap { ESPNDate.parse($0["date"].string) }
-        if let last = dates.max(), Date().timeIntervalSince(last) > 86_400 * 10 { return "Off Season" }
         if let next = dates.filter({ $0 > Date() }).min() {
             if Calendar.current.isDateInToday(next) { return "Today \(Fmt.time(next))" }
             return "Next: \(Fmt.day(next))"
         }
-        return d["leagues"][0]["season"]["type"]["name"].string
+        if !events.isEmpty, dates.contains(where: { Calendar.current.isDateInToday($0) }) { return "Today · Final" }
+        // ESPN's calendar lists every match day ("2026-11-28T07:00Z" = that US day).
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyy-MM-dd"
+        let today = Calendar.current.startOfDay(for: Date())
+        let days = d["leagues"][0]["calendar"].array.compactMap { $0.string.flatMap { f.date(from: String($0.prefix(10))) } }
+        if let next = days.filter({ $0 > today }).min() { return "Next: \(Fmt.dayOnly(next))" }
+        if let last = days.max(), last < today.addingTimeInterval(-86_400 * 10) { return "Off Season" }
+        if let last = dates.max(), Date().timeIntervalSince(last) > 86_400 * 10 { return "Off Season" }
+        return nil
     }
 
     // MARK: Cups
@@ -125,15 +134,40 @@ extension ESPN {
     }
 
     /// Games in a cup round (fetched day by day; ESPN refuses ranges).
+    /// ESPN's round windows are broad (e.g. 4 Sep – 30 Oct for games on 27–28 Oct),
+    /// so use the round's short label ("Oct 27-28", "Aug 21-Sep 2") for the real days.
     static func cupGames(_ league: League, round: CupRound) async throws -> [Game] {
         let cal = Calendar.current
-        var days: [Date] = []
-        var d = cal.startOfDay(for: round.start)
-        while d <= round.end && days.count < 45 {
-            days.append(d)
-            d = cal.date(byAdding: .day, value: 1, to: d)!
+        var days = matchDays(round)
+        if days.isEmpty {
+            var d = cal.startOfDay(for: round.start)
+            while d <= round.end { days.append(d); d = cal.date(byAdding: .day, value: 1, to: d)! }
         }
-        return try await GameFeed.days(league, days)
+        // ESPN dates are US-based: include the day before each match day too.
+        let withPrev = Set(days.flatMap { [$0, cal.date(byAdding: .day, value: -1, to: $0)!] })
+        let games = try await GameFeed.days(league, Array(withPrev))
+        return games.filter { g in days.contains { cal.isDate($0, inSameDayAs: g.date) } || days.isEmpty }
+    }
+
+    /// "Oct 27-28" / "Aug 21-Sep 2" / "Dec 4-Feb 11" -> each day in that span.
+    static func matchDays(_ round: CupRound) -> [Date] {
+        let cal = Calendar.current
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "MMM d yyyy"
+        let parts = round.detail.split(separator: "-").map { $0.trimmingCharacters(in: .whitespaces) }
+        guard parts.count == 2 else { return [] }
+        let startYear = cal.component(.year, from: round.start.addingTimeInterval(86_400))
+        guard let first = f.date(from: "\(parts[0]) \(startYear)") else { return [] }
+        let month = parts[0].split(separator: " ").first.map(String.init) ?? ""
+        let secondText = parts[1].contains(" ") ? parts[1] : "\(month) \(parts[1])"
+        guard var last = f.date(from: "\(secondText) \(startYear)") else { return [] }
+        if last < first { last = cal.date(byAdding: .year, value: 1, to: last)! }
+        // Long spans (e.g. "Dec 4-Feb 11") are scheduling windows: cap at 70 days.
+        var out: [Date] = []
+        var d = first
+        while d <= last && out.count < 70 { out.append(d); d = cal.date(byAdding: .day, value: 1, to: d)! }
+        return out
     }
 
     /// NBA Cup season label: the Cup runs Oct–Dec.
@@ -144,8 +178,38 @@ extension ESPN {
 
     // MARK: Team
 
+    /// Every game of a season, from the league's match-day calendar (rugby has no team schedules on ESPN).
+    static func seasonGames(_ league: League) async throws -> [Game] {
+        guard let path = league.espn, let url = URL(string: "\(site)/\(path)/scoreboard") else { return [] }
+        let d = try await HTTP.shared.json(url, maxAge: 3600)
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyy-MM-dd"
+        let days = d["leagues"][0]["calendar"].array.compactMap { $0.string.flatMap { f.date(from: String($0.prefix(10))) } }
+        return try await GameFeed.days(league, days)
+    }
+
     static func team(_ league: League, id: String) async throws -> TeamPage {
         guard let path = league.espn else { throw FetchError.parse("No ESPN path") }
+        if league.family == .rugby {
+            let groups = try await standings(league, divisions: false)
+            let row = groups.flatMap(\.rows).first { $0.id == id }
+            let games = try await seasonGames(league).filter { $0.home.id == id || $0.away.id == id }
+            let form = games.filter { $0.state == .post }.suffix(5).map { g -> String in
+                let me = g.home.id == id ? g.home : g.away, them = g.home.id == id ? g.away : g.home
+                let a = Int(me.score ?? "") ?? 0, b = Int(them.score ?? "") ?? 0
+                return a > b ? "W" : a < b ? "L" : "D"
+            }
+            let s = row?.stats ?? [:]
+            let stats = [("Played", "gamesPlayed"), ("Won", "gamesWon"), ("Drawn", "gamesDrawn"), ("Lost", "gamesLost"),
+                         ("Points for", "pointsFor"), ("Points against", "pointsAgainst"), ("Tries for", "triesFor"),
+                         ("Bonus points", "bonusPoints"), ("League points", "points")]
+                .compactMap { pair in s[pair.1].map { InfoRow(label: pair.0, value: $0) } }
+            return TeamPage(league: league, id: id, name: row?.name ?? "", abbr: row?.abbr ?? "", logo: row?.logo,
+                            color: nil, record: s["overall"].map { _ in "\(s["gamesWon"] ?? "0")-\(s["gamesDrawn"] ?? "0")-\(s["gamesLost"] ?? "0")" },
+                            standing: s["rank"].map { "\(BBL.ordinal(Int($0) ?? 0)) in Premiership Rugby" },
+                            games: games, roster: [], stats: stats, injuries: [], form: form)
+        }
         let base = "\(site)/\(path)/teams/\(id)"
         async let infoJ = HTTP.shared.json(URL(string: base)!, maxAge: 600)
         async let schedJ = HTTP.shared.json(URL(string: "\(base)/schedule")!, maxAge: 300)

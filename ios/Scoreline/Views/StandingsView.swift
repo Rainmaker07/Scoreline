@@ -11,6 +11,11 @@ private struct Col {
 
 private func columns(_ league: League) -> [Col] {
     switch league.family {
+    case .rugby:
+        return [Col(key: "gamesPlayed", label: "P", width: 22), Col(key: "gamesWon", label: "W", width: 22),
+                Col(key: "gamesDrawn", label: "D", width: 22), Col(key: "gamesLost", label: "L", width: 22),
+                Col(key: "pointsDifference", label: "PD", width: 36), Col(key: "bonusPoints", label: "BP", width: 26),
+                Col(key: "points", label: "Pts", strong: true, width: 30)]
     case .soccer:
         return [Col(key: "gamesPlayed", label: "P", width: 24), Col(key: "wins", label: "W", width: 24),
                 Col(key: "ties", label: "D", width: 24), Col(key: "losses", label: "L", width: 24),
@@ -21,9 +26,10 @@ private func columns(_ league: League) -> [Col] {
                 Col(key: "Last Ten Games", label: "L10", width: 34), Col(key: "streak", label: "STRK", width: 36)]
     default:
         if league.provider == .bbl {
-            return [Col(key: "wins", label: "W", width: 26), Col(key: "losses", label: "L", width: 26),
+            // Five columns so names like "Braunschweig" fit; L10 is in the expanded row.
+            return [Col(key: "wins", label: "W", width: 24), Col(key: "losses", label: "L", width: 24),
                     Col(key: "winPercent", label: "PCT", strong: true, width: 40), Col(key: "differential", label: "+/-", width: 40),
-                    Col(key: "Last Ten Games", label: "L10", width: 32), Col(key: "streak", label: "STRK", width: 36)]
+                    Col(key: "streak", label: "STRK", width: 34)]
         }
         return [Col(key: "wins", label: "W", width: 26), Col(key: "losses", label: "L", width: 26),
                 Col(key: "winPercent", label: "PCT", strong: true, width: 40), Col(key: "gamesBehind", label: "GB", width: 32),
@@ -34,6 +40,10 @@ private func columns(_ league: League) -> [Col] {
 /// Extra stats shown when a row is tapped.
 private func details(_ league: League) -> [Col] {
     switch league.family {
+    case .rugby:
+        return [Col(key: "pointsFor", label: "Points for"), Col(key: "pointsAgainst", label: "Points against"),
+                Col(key: "triesFor", label: "Tries for"), Col(key: "triesAgainst", label: "Tries against"),
+                Col(key: "bonusPointsTry", label: "Try bonus points"), Col(key: "bonusPointsLosing", label: "Losing bonus points")]
     case .soccer:
         return [Col(key: "pointsFor", label: "Goals for"), Col(key: "pointsAgainst", label: "Goals against"),
                 Col(key: "ppg", label: "Points per game")]
@@ -43,13 +53,28 @@ private func details(_ league: League) -> [Col] {
                 Col(key: "vs. Div.", label: "vs. Division")]
     default:
         if league.provider == .bbl {
-            return [Col(key: "Home", label: "Home"), Col(key: "Road", label: "Away"), Col(key: "pointsFor", label: "Points scored"),
-                    Col(key: "pointsAgainst", label: "Points allowed"), Col(key: "gamesPlayed", label: "Games")]
+            return [Col(key: "Last Ten Games", label: "Last 10"), Col(key: "Home", label: "Home"), Col(key: "Road", label: "Away"),
+                    Col(key: "pointsFor", label: "Points scored"), Col(key: "pointsAgainst", label: "Points allowed"),
+                    Col(key: "gamesPlayed", label: "Games")]
         }
         return [Col(key: "Home", label: "Home"), Col(key: "Road", label: "Away"), Col(key: "avgPointsFor", label: "Points per game"),
                 Col(key: "avgPointsAgainst", label: "Opp. points per game"), Col(key: "differential", label: "Point differential"),
                 Col(key: "vs. Conf.", label: "vs. Conference")]
     }
+}
+
+/// Shorter forms for names that don't fit the table on a 390-pt-wide phone.
+func tableName(_ name: String) -> String {
+    let map: [String: String] = [
+        "Wolverhampton": "Wolves", "Wolverhampton Wanderers": "Wolves", "Nottingham Forest": "Forest", "Nott'm Forest": "Forest",
+        "Kaiserslautern": "K'lautern", "Mönchengladbach": "Gladbach", "Bor. Mönchengladbach": "Gladbach",
+        "Greuther Furth": "Fürth", "Greuther Fürth": "Fürth", "E Braunschweig": "Braunschweig", "Eintracht Braunschweig": "Braunschweig",
+        "Leicester Tigers": "Leicester", "Gloucester Rugby": "Gloucester", "Harlequins": "Quins", "Northampton Saints": "Northampton",
+        "Sale Sharks": "Sale", "Exeter Chiefs": "Exeter", "Newcastle Red Bulls": "Newcastle", "Newcastle Falcons": "Newcastle",
+        "Bristol Bears": "Bristol", "Bath Rugby": "Bath", "Bristol Rugby": "Bristol", "Saracens": "Saracens",
+    ]
+    if let m = map[name] { return m }
+    return name.replacingOccurrences(of: " Rugby", with: "")
 }
 
 // MARK: - Zones
@@ -85,6 +110,8 @@ private func zones(_ league: League, group: StandingGroup, rows: [StandingRow], 
     let playoffs = Zone(label: "Playoffs", color: Color(hex: "30d158"))
     let playIn = Zone(label: "Play-In", color: Color(hex: "ff9f0a"))
     switch league.family {
+    case .rugby:
+        return byIndex { i in i < 4 ? Zone(label: "Play-offs", color: Color(hex: "30d158")) : nil }
     case .soccer:
         return rows.map { soccerZone($0.noteText) }
     case .baseball:
@@ -107,7 +134,7 @@ private func zones(_ league: League, group: StandingGroup, rows: [StandingRow], 
 private func sortRows(_ league: League, _ rows: [StandingRow], divisions: Bool) -> [StandingRow] {
     func num(_ r: StandingRow, _ k: String) -> Double { Double(r.stats[k] ?? "") ?? 0 }
     switch league.family {
-    case .soccer:
+    case .soccer, .rugby:
         return rows.sorted { (Int($0.stats["rank"] ?? "") ?? 99) < (Int($1.stats["rank"] ?? "") ?? 99) }
     default:
         if league.provider == .bbl {
@@ -195,7 +222,7 @@ struct StandingsSection: View {
 
     var body: some View {
         VStack(spacing: 12) {
-            if league.family != .soccer && league.provider == .espn {
+            if (league.family == .basketball || league.family == .baseball) && league.provider == .espn {
                 Picker("", selection: $divisions) {
                     Text(league.family == .baseball ? "League" : "Conference").tag(false)
                     Text("Division").tag(true)
@@ -312,7 +339,7 @@ struct StandingsTable: View {
                 HStack(spacing: 4) {
                     HStack(spacing: 4) {
                         RoundedRectangle(cornerRadius: 1.5).fill(zone?.color ?? .clear).frame(width: 3, height: 18)
-                        Text(r.stats["rank"].flatMap { league.family == .soccer || league.provider == .bbl ? $0 : nil } ?? "\(index + 1)")
+                        Text(r.stats["rank"].flatMap { league.family == .soccer || league.family == .rugby || league.provider == .bbl ? $0 : nil } ?? "\(index + 1)")
                             .foregroundStyle(Theme.secondary)
                             .font(.footnote.weight(.semibold))
                     }
@@ -321,10 +348,10 @@ struct StandingsTable: View {
                         LogoView(url: r.logo, fallback: r.abbr, size: 20)
                         VStack(alignment: .leading, spacing: 1) {
                             HStack(spacing: 4) {
-                                Text(league.family == .soccer || league.provider == .bbl ? r.short : r.abbr)
-                                    .fontWeight(.semibold)
+                                Text(league.family == .soccer || league.family == .rugby || league.provider == .bbl ? tableName(r.short) : r.abbr)
+                                    .font(.system(size: 14, weight: .semibold))
                                     .lineLimit(1)
-                                    .minimumScaleFactor(0.8)
+                                    .minimumScaleFactor(0.9)
                                 if let m = live?.movement, m != 0 {
                                     Text(m > 0 ? "▲\(m)" : "▼\(-m)")
                                         .font(.system(size: 9, weight: .bold))

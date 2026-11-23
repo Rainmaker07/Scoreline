@@ -32,6 +32,14 @@ struct Scorer: Hashable {
     let text: String
 }
 
+/// Rugby scoring event (try, conversion, penalty, drop goal).
+struct ScoringEvent: Hashable {
+    let minute: String
+    let teamId: String
+    let kind: String
+    let player: String
+}
+
 struct Game: Identifiable, Hashable {
     let id: String
     let leagueId: String
@@ -43,6 +51,7 @@ struct Game: Identifiable, Hashable {
     var note: String?
     var broadcast: String?
     var scorers: [Scorer]
+    var events: [ScoringEvent] = []
 
     var league: League { League.byId(leagueId)! }
 
@@ -72,6 +81,7 @@ struct StandingGroup: Identifiable, Hashable {
 struct LeaderEntry: Hashable {
     let name: String
     var athleteId: String? = nil
+    var position: String? = nil
     let team: String?
     let teamLogo: URL?
     let headshot: URL?
@@ -157,6 +167,11 @@ enum ESPN {
             let pensText = league.family == .soccer ? "Penalties \(hp)–\(ap)" : "Shootout \(hp)–\(ap)"
             note = [note, pensText].compactMap { $0 }.joined(separator: " · ")
         }
+        let rugbyEvents: [ScoringEvent] = league.family == .rugby ? comp["details"].array.map { d in
+            ScoringEvent(minute: d["clock"]["displayValue"].str, teamId: d["team"]["id"].str,
+                         kind: d["type"]["text"].str.capitalized,
+                         player: d["athletesInvolved"][0]["shortName"].string ?? d["athletesInvolved"][0]["displayName"].str)
+        } : []
         return Game(
             id: e["id"].str,
             leagueId: league.id,
@@ -167,13 +182,16 @@ enum ESPN {
             away: away,
             note: note,
             broadcast: broadcast.isEmpty ? comp["broadcast"].string : broadcast,
-            scorers: scorers
+            scorers: scorers,
+            events: rugbyEvents
         )
     }
 
     static func scoreboard(_ league: League, date: Date) async throws -> [Game] {
         guard let path = league.espn, let url = URL(string: "\(site)/\(path)/scoreboard?dates=\(ESPNDate.ymd(date))") else { return [] }
-        let d = try await HTTP.shared.json(url, maxAge: 15)
+        // Days before yesterday are settled: cache them for a while.
+        let settled = date < Calendar.current.date(byAdding: .day, value: -2, to: Calendar.current.startOfDay(for: Date()))!
+        let d = try await HTTP.shared.json(url, maxAge: settled ? 86_400 * 3 : 15)
         return d["events"].array.map { game($0, league: league) }
             .sorted { ($0.state.sortRank, $0.date) < ($1.state.sortRank, $1.date) }
     }
@@ -207,9 +225,18 @@ enum ESPN {
                     noteText: en["note"]["description"].string
                 )
             }
-            out.append(StandingGroup(name: node["name"].str, rows: rows))
+            out.append(StandingGroup(name: cleanCompetitionName(node["name"].str), rows: rows))
         }
         for c in node["children"].array { collect(c, into: &out) }
+    }
+
+    /// "2026-27 English Premier League" -> "2026-27 Premier League", "UEFA Europa League" -> "Europa League".
+    static func cleanCompetitionName(_ s: String) -> String {
+        var out = s
+        for p in ["English ", "German ", "UEFA ", "Spanish ", "Italian ", "French "] {
+            out = out.replacingOccurrences(of: p, with: "")
+        }
+        return out
     }
 
     static func standings(_ league: League, divisions: Bool) async throws -> [StandingGroup] {
@@ -259,15 +286,17 @@ enum ESPN {
                 leaders: c["leaders"].array.map { l in
                     let full = l["displayValue"].str
                     let value = formatLeader(name, value: l["value"].double, display: full)
+                    // Subtitle: position and full team name (no stat line).
                     return LeaderEntry(
                         name: l["athlete"]["displayName"].str,
                         athleteId: l["athlete"]["id"].string,
-                        team: l["team"]["abbreviation"].string ?? l["athlete"]["team"]["abbreviation"].string,
+                        position: l["athlete"]["position"]["abbreviation"].string,
+                        team: l["team"]["displayName"].string ?? l["athlete"]["team"]["displayName"].string
+                            ?? l["team"]["abbreviation"].string,
                         teamLogo: l["team"]["logos"][0]["href"].url,
                         headshot: l["athlete"]["headshot"]["href"].url,
                         value: value,
-                        // Baseball's displayValue is the player's full stat line: keep it as context.
-                        detail: value == full ? nil : full
+                        detail: nil
                     )
                 }
             )

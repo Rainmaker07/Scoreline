@@ -1,0 +1,240 @@
+import Foundation
+
+// MARK: - UCI WorldTour calendar
+
+struct WTRace: Identifiable, Hashable {
+    var id: String { "\(year)-\(name)" }
+    let name: String
+    let year: Int
+    let dates: String
+    let start: Date?
+    let end: Date?
+    let winner: String?
+    let country: String?
+
+    var isGrandTour: Bool { TourDef.all.contains { name.lowercased().contains($0.wiki.lowercased()) || name.lowercased().contains($0.short.lowercased() + " ") } }
+    var isMonument: Bool {
+        ["milan–san remo", "milan-san remo", "tour of flanders", "paris–roubaix", "paris-roubaix", "liège–bastogne–liège",
+         "liege–bastogne–liege", "il lombardia", "giro di lombardia"].contains { name.lowercased().contains($0) }
+    }
+    var isLive: Bool { if let s = start, let e = end { return Date() >= s && Date() <= e.addingTimeInterval(86_399) } else { return false } }
+    var wikiTitle: String { "\(year) \(name)" }
+}
+
+struct OneDayResult {
+    let name: String
+    let year: Int
+    let dates: String?
+    let distance: String?
+    let results: [RiderResult]
+    let summary: [String]
+}
+
+enum WorldTour {
+    static func calendar(_ year: Int) async throws -> [WTRace] {
+        let past = year < Calendar.current.component(.year, from: Date())
+        guard let url = CyclingService.wikiURL("\(year) UCI World Tour") else { return [] }
+        let html = try await HTTP.shared.text(url, maxAge: past ? 86_400 * 60 : 21_600, permanent: past)
+        return await Task.detached(priority: .userInitiated) { () -> [WTRace] in
+            let tables = WikiHTML.tables(in: html)
+            guard let t = tables.first(where: { ($0.column("race") != nil || $0.column("event") != nil) && $0.column("date") != nil }) else { return [] }
+            let raceCol = t.column("race") ?? t.column("event") ?? 0
+            let dateCol = t.column("date")
+            let winCol = t.column("winner")
+            var out: [WTRace] = []
+            for r in t.rows.dropFirst() {
+                guard r.count > raceCol else { continue }
+                var name = r[raceCol]
+                var country: String?
+                if let m = name.range(of: #"\s*\(([A-Z]{3})\)\s*$"#, options: .regularExpression) {
+                    country = String(name[m]).trimmingCharacters(in: CharacterSet(charactersIn: " ()"))
+                    name.removeSubrange(m)
+                }
+                if name.isEmpty || name.lowercased() == "race" { continue }
+                let dates = dateCol.flatMap { r.count > $0 ? r[$0] : nil } ?? ""
+                let (s, e) = WorldTour.parseDates(dates, year: year)
+                let winner = winCol.flatMap { r.count > $0 ? CyclingService.splitRider(r[$0]).0 : nil }
+                out.append(WTRace(name: name, year: year, dates: dates, start: s, end: e,
+                                  winner: (winner?.isEmpty ?? true) ? nil : winner, country: country))
+            }
+            return out
+        }.value
+    }
+
+    /// "21–26 January", "18 March", "30 March – 5 April"
+    static func parseDates(_ s: String, year: Int) -> (Date?, Date?) {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_GB")
+        f.dateFormat = "d MMMM yyyy"
+        let clean = s.replacingOccurrences(of: "–", with: "-").replacingOccurrences(of: "—", with: "-")
+        let parts = clean.split(separator: "-").map { $0.trimmingCharacters(in: .whitespaces) }
+        guard let lastPart = parts.last, let end = f.date(from: "\(lastPart) \(year)") else { return (nil, nil) }
+        if parts.count == 1 { return (end, end) }
+        let month = lastPart.split(separator: " ").dropFirst().joined(separator: " ")
+        let first = parts[0].contains(" ") ? parts[0] : "\(parts[0]) \(month)"
+        return (f.date(from: "\(first) \(year)") ?? end, end)
+    }
+
+    /// A one-day race's result (top 10) from its Wikipedia article.
+    static func oneDay(_ race: WTRace) async throws -> OneDayResult {
+        guard let url = CyclingService.wikiURL(race.wikiTitle) else { throw FetchError.parse("Bad title") }
+        let finished = (race.end ?? Date()) < Date().addingTimeInterval(-86_400 * 3)
+        let html = try await HTTP.shared.text(url, maxAge: finished ? 86_400 * 365 : 1800, permanent: finished)
+        return await Task.detached(priority: .userInitiated) { () -> OneDayResult in
+            let tables = WikiHTML.tables(in: html)
+            let result = tables.first { t in
+                let c = t.caption.lowercased()
+                return (c.contains("result") || c.contains("classification")) && t.column("rider") != nil
+            } ?? tables.first { $0.column("rider") != nil && $0.column("rank") != nil }
+            var distance: String?
+            for t in tables {
+                if let row = t.rows.first(where: { $0.first == "Distance" && $0.count > 1 }) { distance = row[1]; break }
+            }
+            let paras = WikiHTML.sections(in: html).first { $0.title.lowercased() == "race summary" || $0.title.lowercased() == "summary" }?.paragraphs ?? []
+            return OneDayResult(name: race.name, year: race.year, dates: race.dates, distance: distance,
+                                results: result.map(CyclingService.riderResults) ?? [], summary: paras)
+        }.value
+    }
+
+    /// A stage race's TourDef so the Grand Tour loader can parse it.
+    static func def(for race: WTRace) -> TourDef {
+        if let gt = TourDef.all.first(where: { race.name.lowercased().contains($0.wiki.lowercased()) }) { return gt }
+        let month = race.end.map { Calendar.current.component(.month, from: $0) } ?? 12
+        return TourDef(id: race.name.lowercased().replacingOccurrences(of: " ", with: "-"), name: race.name, short: race.name,
+                       wiki: race.name, color: "5a4a00", endMonth: month, jerseys: [
+                           JerseyDef(key: .gc, label: "Leader", color: "ffd60a"),
+                           JerseyDef(key: .points, label: "Points", color: "22c55e"),
+                           JerseyDef(key: .kom, label: "Mountains", color: "ef4444"),
+                           JerseyDef(key: .youth, label: "Young rider", color: "f2f2f2"),
+                       ])
+    }
+}
+
+// MARK: - Riders and teams (Wikipedia)
+
+struct RiderProfile {
+    let name: String
+    let description: String?
+    let image: URL?
+    let info: [InfoRow]
+    let currentTeam: String?
+    let teams: [(years: String, team: String)]
+    let majorWins: [(category: String, items: [String])]
+    let extract: String?
+}
+
+struct CyclingTeamProfile {
+    let name: String
+    let image: URL?
+    let info: [InfoRow]
+    let roster: WikiTable?
+    let wins: WikiTable?
+    let extract: String?
+}
+
+enum CyclingPeople {
+    static func rider(_ name: String) async throws -> RiderProfile {
+        guard let url = CyclingService.wikiURL(name) else { throw FetchError.parse("Bad name") }
+        let html = try await HTTP.shared.text(url, maxAge: 86_400 * 3)
+        let summary = await Wiki.summary(name)
+        return await Task.detached(priority: .userInitiated) { () -> RiderProfile in
+            let infobox = WikiHTML.tables(in: html).first { $0.rows.contains { $0.first == "Born" || $0.first == "Current team" } }
+            var info: [InfoRow] = []
+            var teams: [(years: String, team: String)] = []
+            var current: String?
+            var inTeams = false
+            for r in infobox?.rows ?? [] {
+                guard r.count >= 2 else { continue }
+                let k = r[0], v = r[1]
+                if k == v { inTeams = k.lowercased().contains("professional team") || k.lowercased().contains("amateur team"); continue }
+                if k.isEmpty { inTeams = false; continue }
+                if inTeams { teams.append((years: k, team: v)); continue }
+                switch k {
+                case "Born":
+                    let cleaned = v.replacingOccurrences(of: #"^\(\d{4}-\d{2}-\d{2}\)\s*"#, with: "", options: .regularExpression)
+                    info.append(InfoRow(label: "Born", value: cleaned))
+                case "Height", "Weight":
+                    info.append(InfoRow(label: k, value: v.components(separatedBy: " (").first ?? v))
+                case "Current team":
+                    current = v
+                case "Rider type", "Discipline", "Nickname":
+                    info.append(InfoRow(label: k, value: v))
+                default: break
+                }
+            }
+            return RiderProfile(name: summary?.title ?? name, description: summary?.description, image: summary?.image,
+                                info: info, currentTeam: current, teams: Array(teams.reversed()),
+                                majorWins: CyclingPeople.majorWins(html), extract: summary?.extract)
+        }.value
+    }
+
+    /// Parses the infobox "Major wins" block: categories → "Race: item (years)".
+    static func majorWins(_ html: String) -> [(category: String, items: [String])] {
+        guard let start = html.range(of: "Major wins") else { return [] }
+        let tail = html[start.upperBound...]
+        let end = tail.range(of: "Medal record")?.lowerBound ?? tail.range(of: "</tbody>")?.lowerBound ?? tail.endIndex
+        let block = String(tail[..<end])
+        var out: [(category: String, items: [String])] = []
+        var category = ""
+        var race = ""
+        var items: [String] = []
+        // Tokens: category (<b> at top or <p><b>), race header (<dd><b>…</b><dl>), item (<dd>…</dd>), end of race (</dl></dd>).
+        let re = try! NSRegularExpression(pattern: #"<p><b>((?:(?!</b>).)*?)</b></p>|<td[^>]*><b>((?:(?!</b>).)*?)</b>|<dd><b>((?:(?!</b>).)*?)</b>\s*<dl>|</dl></dd>|<dd>((?:(?!<dl>|<dd>).)*?)</dd>"#,
+                                          options: [.dotMatchesLineSeparators])
+        let ns = block as NSString
+        for m in re.matches(in: block, range: NSRange(location: 0, length: ns.length)) {
+            func g(_ i: Int) -> String? { m.range(at: i).location == NSNotFound ? nil : WikiHTML.clean(ns.substring(with: m.range(at: i))) }
+            if let c = g(1) ?? g(2) {
+                if !items.isEmpty { out.append((category: category, items: items)) }
+                category = c; items = []; race = ""
+            } else if let r = g(3) {
+                race = r
+            } else if let item = g(4) {
+                items.append(race.isEmpty ? item : "\(race): \(item)")
+            } else {
+                race = ""
+            }
+        }
+        if !items.isEmpty { out.append((category: category, items: items)) }
+        return out.filter { !$0.category.isEmpty }
+    }
+
+    static func team(_ name: String) async throws -> CyclingTeamProfile {
+        let year = Calendar.current.component(.year, from: Date())
+        let summary = await Wiki.summary(name)
+        let title = summary?.title ?? name
+        var info: [InfoRow] = []
+        if let url = CyclingService.wikiURL(title), let html = try? await HTTP.shared.text(url, maxAge: 86_400 * 3) {
+            let box = WikiHTML.tables(in: html).first { $0.rows.contains { ["UCI code", "Registered", "Founded"].contains($0.first ?? "") } }
+            for r in box?.rows ?? [] where r.count >= 2 && r[0] != r[1] && !r[0].isEmpty {
+                if ["UCI code", "Registered", "Founded", "Discipline", "Status", "Bicycles", "General manager", "Team manager(s)", "Team manager", "Based"].contains(r[0]) {
+                    info.append(InfoRow(label: r[0], value: r[1]))
+                }
+            }
+        }
+        var roster: WikiTable?
+        var wins: WikiTable?
+        for y in [year, year - 1] {
+            guard roster == nil, let url = CyclingService.wikiURL("\(y) \(title) season"),
+                  let html = try? await HTTP.shared.text(url, maxAge: 86_400) else { continue }
+            let tables = WikiHTML.tables(in: html)
+            roster = tables.first { $0.column("rider") != nil && ($0.column("born") != nil || $0.column("date of birth") != nil) }
+            wins = tables.first { $0.column("race") != nil && $0.column("rider") != nil && $0.column("date") != nil }
+        }
+        return CyclingTeamProfile(name: title, image: summary?.image, info: info, roster: roster, wins: wins, extract: summary?.extract)
+    }
+}
+
+extension CyclingService {
+    /// Public wrapper around the rider table parser (rank, rider (CTY), team, value).
+    static func riderResults(_ t: WikiTable) -> [RiderResult] {
+        let riderCol = t.column("rider") ?? 1
+        let teamCol = t.column("team")
+        let valueCol = (t.rows.first?.count ?? 1) - 1
+        return t.rows.dropFirst().compactMap { r in
+            guard r.count > max(riderCol, valueCol), let rank = Int(r[0].trimmingCharacters(in: .whitespaces)) else { return nil }
+            let (name, country) = splitRider(r[riderCol])
+            return RiderResult(rank: rank, name: name, country: country, team: teamCol.map { r.count > $0 ? r[$0] : "" } ?? "", value: r[valueCol])
+        }
+    }
+}

@@ -4,6 +4,7 @@ struct CyclingView: View {
     var refresh = 0
     @State private var year: Int
     @State private var tour: TourDef
+    @AppStorage("cyclingTab") private var tab = 0
 
     init(refresh: Int = 0) {
         self.refresh = refresh
@@ -21,6 +22,14 @@ struct CyclingView: View {
     var body: some View {
         let thisYear = Calendar.current.component(.year, from: Date())
         VStack(alignment: .leading, spacing: 12) {
+            Picker("", selection: $tab) {
+                Text("Grand Tours").tag(0)
+                Text("WorldTour").tag(1)
+            }
+            .pickerStyle(.segmented)
+            if tab == 1 {
+                WorldTourList(refresh: refresh)
+            } else {
             ChipRow(items: [thisYear, thisYear - 1, thisYear - 2], selected: year, title: { String($0) }) { year = $0 }
             HStack(spacing: 8) {
                 ForEach(TourDef.all) { t in
@@ -49,6 +58,7 @@ struct CyclingView: View {
                 .font(.caption2)
                 .foregroundStyle(Theme.tertiary)
                 .padding(.horizontal, 4)
+            }
         }
     }
 }
@@ -110,7 +120,7 @@ private struct EditionBody: View {
         }()
         return VStack(alignment: .leading, spacing: 4) {
             TourLogo(tour: def, size: 56)
-            Text("\(def.name) \(edition.year)").font(.title2.weight(.heavy))
+            Text(verbatim: "\(def.name) \(edition.year)").font(.title2.weight(.heavy))
             if let d = edition.dates { Text(d).font(.footnote).foregroundStyle(Theme.secondary) }
             HStack(spacing: 6) {
                 if status.hasPrefix("Racing") { LivePulse() }
@@ -185,7 +195,10 @@ struct TourLogo: View {
     var size: CGFloat = 44
     var body: some View {
         if let url = LogoAssets.grandTour(tour.id) {
+            // Light badge: the Tour and Giro logos are dark lettering.
             LogoView(url: url, fallback: tour.short, size: size)
+                .padding(4)
+                .background(Color.white, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         } else {
             Capsule().fill(Color(hex: tour.color)).frame(width: size, height: 4)
         }
@@ -200,31 +213,34 @@ struct RiderList: View {
         let starred = store.favoriteNames(kind: .rider)
         ForEach(Array(riders.enumerated()), id: \.offset) { i, r in
             if i > 0 { Divider().overlay(Theme.separator) }
-            if teams || r.team.isEmpty {
-                row(i, r, starred: false)
-            } else {
-                NavigationLink(value: Route.rider(name: r.name)) { row(i, r, starred: starred.contains(r.name.lowercased())) }
-                    .buttonStyle(.plain)
-            }
+            row(r, starred: !teams && starred.contains(r.name.lowercased()))
         }
     }
 
-    private func row(_ i: Int, _ r: RiderResult, starred: Bool) -> some View {
-            HStack(spacing: 10) {
-                Text("\(r.rank)").font(.footnote.weight(.bold)).foregroundStyle(Theme.secondary).frame(width: 22, alignment: .leading)
-                VStack(alignment: .leading, spacing: 1) {
+    /// Rider name and team are separate links (a link inside a link doesn't receive taps).
+    private func row(_ r: RiderResult, starred: Bool) -> some View {
+        HStack(spacing: 10) {
+            Text("\(r.rank)").font(.footnote.weight(.bold)).foregroundStyle(Theme.secondary).frame(width: 22, alignment: .leading)
+            VStack(alignment: .leading, spacing: 1) {
+                NavigationLink(value: teams ? Route.cyclingTeam(r.name) : Route.rider(name: r.name)) {
                     HStack(spacing: 5) {
                         Text(r.name).font(.subheadline.weight(.bold)).lineLimit(1)
                         if let c = r.country { Text(c).font(.caption2.weight(.semibold)).foregroundStyle(Theme.secondary) }
                     }
-                    if !r.team.isEmpty { Text(r.team).font(.caption).foregroundStyle(Theme.secondary).lineLimit(1) }
                 }
-                Spacer()
-                Text(r.value).font(.subheadline.weight(.semibold)).monospacedDigit()
+                .buttonStyle(.plain)
+                if !r.team.isEmpty {
+                    NavigationLink(value: Route.cyclingTeam(r.team)) {
+                        Text(r.team).font(.caption).foregroundStyle(Theme.secondary).lineLimit(1)
+                    }
+                    .buttonStyle(.plain)
+                }
             }
-            .padding(.vertical, 8)
-            .background(starred ? Color.yellow.opacity(0.10) : .clear)
-            .contentShape(Rectangle())
+            Spacer()
+            Text(r.value).font(.subheadline.weight(.semibold)).monospacedDigit()
+        }
+        .padding(.vertical, 8)
+        .background(starred ? Color.yellow.opacity(0.10) : .clear)
     }
 }
 
@@ -265,6 +281,8 @@ struct KindBadge: View {
             Image(systemName: kind.symbol)
             Text(kind.label.uppercased())
         }
+        .lineLimit(1)
+        .fixedSize()
         .font(.system(size: 10, weight: .bold))
         .foregroundStyle(colors.fg)
         .padding(.horizontal, 6)

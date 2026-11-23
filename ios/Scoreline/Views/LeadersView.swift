@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Player face with a small team badge. Football photos come from Wikipedia
-/// (ESPN has none); only used when the article is about a footballer.
+/// Player face with a small team badge. Football photos come from FotMob
+/// (ESPN has none), matched by name and club.
 struct PlayerPhoto: View {
     let headshot: URL?
     let name: String
@@ -9,11 +9,12 @@ struct PlayerPhoto: View {
     let teamLogo: URL?
     let team: String
     var size: CGFloat = 40
-    @State private var wikiImage: URL?
-    @State private var looked = false
+    @State private var lookedUp: (name: String, url: URL?)?
 
     var body: some View {
-        let photo = headshot ?? wikiImage
+        // Only use a looked-up photo if it belongs to *this* player (rows get reused).
+        let found = lookedUp?.name == name ? lookedUp?.url : nil
+        let photo = headshot ?? found
         ZStack(alignment: .bottomTrailing) {
             if let photo {
                 AsyncImage(url: photo) { $0.resizable().scaledToFill() } placeholder: { Theme.card2 }
@@ -31,11 +32,9 @@ struct PlayerPhoto: View {
         }
         .frame(width: size, height: size)
         .task(id: name) {
-            guard headshot == nil, isFootball, !looked else { return }
-            looked = true
-            if let s = await Wiki.summary(name), (s.description ?? "").lowercased().contains("footballer") {
-                wikiImage = s.image
-            }
+            guard headshot == nil, isFootball, lookedUp?.name != name else { return }
+            let url = await FotMob.photo(name: name, team: team)
+            lookedUp = (name, url)
         }
     }
 }
@@ -77,7 +76,7 @@ struct LeadersSection: View {
                         teamLogo: l.teamLogo, team: l.team ?? "")
             VStack(alignment: .leading, spacing: 1) {
                 Text(l.name).font(.subheadline.weight(.bold)).lineLimit(1)
-                Text([l.team, l.detail].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "))
+                Text([l.position, l.team, l.detail].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "))
                     .font(.caption).foregroundStyle(Theme.secondary).lineLimit(1)
             }
             Spacer(minLength: 8)

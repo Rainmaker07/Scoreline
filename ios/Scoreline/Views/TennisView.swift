@@ -71,6 +71,14 @@ private struct TournamentList: View {
 struct TierBadge: View {
     let tier: TennisTier
     var body: some View {
+        if tier == .t500, let url = LogoAssets.atp500 {
+            LogoView(url: url, fallback: "500", size: 22)
+        } else {
+            textBadge
+        }
+    }
+
+    private var textBadge: some View {
         Text(tier.badge)
             .font(.system(size: 9, weight: .heavy))
             .foregroundStyle(Color(hex: tier.color))
@@ -85,14 +93,7 @@ private struct TournamentRow: View {
     var body: some View {
         NavigationLink(value: Route.tournament(t)) {
             HStack(spacing: 12) {
-                if let slam = Slam.all.first(where: { t.name.lowercased().contains($0.name.split(separator: " ").first!.lowercased()) }), t.tier == .slam {
-                    SlamLogo(slam: slam, size: 34)
-                } else {
-                    Image(systemName: t.tier == .team ? "flag.2.crossed.fill" : "tennisball.fill")
-                        .font(.system(size: 18))
-                        .foregroundStyle(Color(hex: t.tier.color))
-                        .frame(width: 34, height: 34)
-                }
+                TournamentLogo(t: t, size: 32)
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
                         Text(t.name).font(.subheadline.weight(.semibold)).lineLimit(1)
@@ -144,11 +145,17 @@ private struct RankingsList: View {
                                 }
                                 .font(.system(size: 10, weight: .bold))
                                 .frame(width: 26, alignment: .leading)
+                                AsyncImage(url: r.headshot) { $0.resizable().scaledToFill() } placeholder: {
+                                    Image(systemName: "person.fill").foregroundStyle(Theme.secondary)
+                                }
+                                .frame(width: 30, height: 30)
+                                .background(Theme.card2)
+                                .clipShape(Circle())
                                 if let f = r.flag {
                                     AsyncImage(url: f) { $0.resizable().scaledToFill() } placeholder: { Theme.card2 }
                                         .frame(width: 20, height: 14).clipShape(RoundedRectangle(cornerRadius: 2))
                                 }
-                                Text(r.name).font(.subheadline.weight(.semibold)).lineLimit(1)
+                                Text(r.name).font(.subheadline.weight(.semibold)).lineLimit(1).minimumScaleFactor(0.75)
                                 if starred.contains(r.name.lowercased()) {
                                     Image(systemName: "star.fill").font(.system(size: 10)).foregroundStyle(.yellow)
                                 }
@@ -174,7 +181,7 @@ private struct RankingsList: View {
 
 struct TournamentView: View {
     let t: TournamentSummary
-    @State private var draw = "mens-singles"
+    private let draw = "mens-singles"
     @State private var round: String?
 
     var body: some View {
@@ -183,18 +190,11 @@ struct TournamentView: View {
                 if let wiki = t.wikiTitle {
                     WikiEventView(title: wiki, finished: Date() > t.end)
                 } else {
-                    Picker("", selection: $draw) {
-                        Text("Singles").tag("mens-singles")
-                        Text("Doubles").tag("mens-doubles")
-                    }
-                    .pickerStyle(.segmented)
-                    .onChange(of: draw) { round = nil }
                     Loader(id: "\(t.id)-\(draw)",
                            poll: { (ev: TennisEvent?) in (ev?.matches.contains(where: { $0.state == .live }) ?? false) ? 30 : nil },
                            load: { try await Tennis.tournament(t, grouping: draw) }) { ev in
                         if let ev {
-                            DrawBody(event: ev, tier: t.tier, slam: t.tier == .slam ? Slam.all.first { ev.name.lowercased().contains($0.name.split(separator: " ").first!.lowercased()) } : nil,
-                                     round: $round)
+                            DrawBody(event: ev, summary: t, round: $round)
                         } else {
                             MessageCard(text: "\(t.name) hasn’t started yet.")
                         }
@@ -212,8 +212,7 @@ struct TournamentView: View {
 
 private struct DrawBody: View {
     let event: TennisEvent
-    let tier: TennisTier
-    let slam: Slam?
+    let summary: TournamentSummary
     @Binding var round: String?
 
     var body: some View {
@@ -226,9 +225,12 @@ private struct DrawBody: View {
 
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 14) {
-                if let slam { SlamLogo(slam: slam, size: 52) } else { TierBadge(tier: tier) }
+                TournamentLogo(t: summary, size: 52)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(event.name).font(.title3.weight(.heavy))
+                    HStack(spacing: 8) {
+                        Text(Tennis.cleanName(event.name)).font(.title3.weight(.heavy)).lineLimit(2).minimumScaleFactor(0.8)
+                        TierBadge(tier: summary.tier)
+                    }
                     if let s = event.start, let e = event.end {
                         Text("\(Fmt.day(s)) – \(Fmt.day(e))\(event.venue.map { " · \($0)" } ?? "")")
                             .font(.footnote).foregroundStyle(Theme.secondary)
@@ -441,7 +443,7 @@ private struct PlayerLine: View {
             }
             .foregroundStyle(lost ? Theme.secondary : .white)
             Spacer()
-            HStack(spacing: 12) {
+            HStack(spacing: 14) {
                 ForEach(Array(p.sets.enumerated()), id: \.offset) { i, s in
                     let lostSet = i < other.sets.count && s.games < other.sets[i].games
                     Text("\(s.games)")
@@ -456,6 +458,7 @@ private struct PlayerLine: View {
             }
             .font(.system(size: 17, weight: .bold))
             .monospacedDigit()
+            .padding(.trailing, 8) // room for tie-break superscripts
         }
         .padding(.vertical, 3)
         .contentShape(Rectangle())
