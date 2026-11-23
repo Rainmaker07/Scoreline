@@ -81,7 +81,7 @@ struct DetailHeader: View {
             if isLogo {
                 LogoView(url: image, fallback: title, size: 88)
             } else {
-                AsyncImage(url: image) { $0.resizable().scaledToFill() } placeholder: {
+                CachedImage(url: image) { $0.resizable().scaledToFill() } placeholder: {
                     Image(systemName: "person.fill").font(.system(size: 40)).foregroundStyle(Theme.secondary)
                 }
                 .frame(width: 104, height: 104)
@@ -318,7 +318,7 @@ private struct TeamRoster: View {
                         if i > 0 { Divider().overlay(Theme.separator) }
                         NavigationLink(value: Route.player(leagueId: league.id, playerId: p.id)) {
                             HStack(spacing: 12) {
-                                AsyncImage(url: p.headshot) { $0.resizable().scaledToFill() } placeholder: { Theme.card2 }
+                                CachedImage(url: p.headshot) { $0.resizable().scaledToFill() } placeholder: { Theme.card2 }
                                     .frame(width: 38, height: 38).clipShape(Circle())
                                 VStack(alignment: .leading, spacing: 1) {
                                     Text(p.name).font(.subheadline.weight(.semibold)).lineLimit(1)

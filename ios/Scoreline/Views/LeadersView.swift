@@ -17,7 +17,7 @@ struct PlayerPhoto: View {
         let photo = headshot ?? found
         ZStack(alignment: .bottomTrailing) {
             if let photo {
-                AsyncImage(url: photo) { $0.resizable().scaledToFill() } placeholder: { Theme.card2 }
+                CachedImage(url: photo) { $0.resizable().scaledToFill() } placeholder: { Theme.card2 }
                     .frame(width: size, height: size)
                     .clipShape(Circle())
                 if teamLogo != nil {

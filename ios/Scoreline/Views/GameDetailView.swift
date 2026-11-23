@@ -134,7 +134,8 @@ private struct GameDetailContent: View {
     let summary: J
     var embedded = false
     let dismiss: () -> Void
-    @State private var tab: DetailTab?
+    // Normally nil (default tab); the screenshot build can preselect one.
+    @State private var tab: DetailTab? = UserDefaults.standard.string(forKey: "shotGameTab").flatMap(DetailTab.init(rawValue:))
 
     private var league: League { game.league }
     private var comp: J { summary["header"]["competitions"][0] }
@@ -697,7 +698,7 @@ private struct GameLeadersCard: View {
     }
 
     private func headshot(_ x: J) -> some View {
-        AsyncImage(url: x["athlete"]["headshot"]["href"].url) { img in img.resizable().scaledToFill() } placeholder: { Theme.card2 }
+        CachedImage(url: x["athlete"]["headshot"]["href"].url) { img in img.resizable().scaledToFill() } placeholder: { Theme.card2 }
             .frame(width: 36, height: 36)
             .background(Theme.card2)
             .clipShape(Circle())
@@ -716,7 +717,7 @@ private struct DecisionsCard: View {
                 ForEach(Array(fa.enumerated()), id: \.offset) { _, f in
                     NavigationLink(value: Route.player(leagueId: league.id, playerId: f["athlete"]["id"].str)) {
                     HStack(spacing: 12) {
-                        AsyncImage(url: f["athlete"]["headshot"]["href"].url) { $0.resizable().scaledToFill() } placeholder: { Theme.card2 }
+                        CachedImage(url: f["athlete"]["headshot"]["href"].url) { $0.resizable().scaledToFill() } placeholder: { Theme.card2 }
                             .frame(width: 38, height: 38).clipShape(Circle())
                         VStack(alignment: .leading) {
                             Text(f["athlete"]["displayName"].str).font(.subheadline.weight(.bold))

@@ -51,6 +51,14 @@ struct RootView: View {
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: Route.self) { RouteView(route: $0) }
         }
+        .task {
+            // Launch options used by the GitHub build (see ScreenshotMode).
+            let d = UserDefaults.standard
+            if d.bool(forKey: "runDataChecks") { await DataChecks.runForCI(); return }
+            if d.bool(forKey: "shotMenu") { menuOpen = true }
+            if d.bool(forKey: "shotSettings") { sheet = .settings }
+            if let spec = d.string(forKey: "shotRoute"), let route = await ScreenshotMode.route(spec) { path.append(route) }
+        }
         .sheet(item: $openGame) { g in
             NavigationStack {
                 GameDetailView(game: g)
@@ -375,11 +383,14 @@ struct SettingsView: View {
                     Button(cleared ? "Cache cleared" : "Clear cached data") {
                         Task {
                             await HTTP.shared.clearAll()
+                            ImageStore.shared.clear()
+                            LoaderMemory.clear()
                             URLCache.shared.removeAllCachedResponses()
                             cleared = true
                         }
                     }
                     .disabled(cleared)
+                    NavigationLink("Check data sources") { DataChecksView() }
                 }
                 Section("Sources") {
                     Text("Scores, standings and stats: ESPN")
@@ -418,7 +429,7 @@ struct SearchView: View {
                             if h.kind == "team" {
                                 LogoView(url: h.image, fallback: h.name, size: 30)
                             } else {
-                                AsyncImage(url: h.image) { $0.resizable().scaledToFill() } placeholder: { Theme.card2 }
+                                CachedImage(url: h.image) { $0.resizable().scaledToFill() } placeholder: { Theme.card2 }
                                     .frame(width: 30, height: 30).clipShape(Circle())
                             }
                             VStack(alignment: .leading) {

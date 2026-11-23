@@ -4,7 +4,7 @@ import SwiftUI
 
 struct TennisView: View {
     var refresh = 0
-    @State private var tab = 0
+    @State private var tab = UserDefaults.standard.integer(forKey: "shotTennisTab")
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -145,14 +145,14 @@ private struct RankingsList: View {
                                 }
                                 .font(.system(size: 10, weight: .bold))
                                 .frame(width: 26, alignment: .leading)
-                                AsyncImage(url: r.headshot) { $0.resizable().scaledToFill() } placeholder: {
+                                CachedImage(url: r.headshot) { $0.resizable().scaledToFill() } placeholder: {
                                     Image(systemName: "person.fill").foregroundStyle(Theme.secondary)
                                 }
                                 .frame(width: 30, height: 30)
                                 .background(Theme.card2)
                                 .clipShape(Circle())
                                 if let f = r.flag {
-                                    AsyncImage(url: f) { $0.resizable().scaledToFill() } placeholder: { Theme.card2 }
+                                    CachedImage(url: f) { $0.resizable().scaledToFill() } placeholder: { Theme.card2 }
                                         .frame(width: 20, height: 14).clipShape(RoundedRectangle(cornerRadius: 2))
                                 }
                                 Text(r.name).font(.subheadline.weight(.semibold)).lineLimit(1).minimumScaleFactor(0.75)
@@ -287,7 +287,7 @@ private struct GroupTable: View {
                 HStack {
                     HStack(spacing: 6) {
                         if let f = r.flag {
-                            AsyncImage(url: f) { $0.resizable().scaledToFill() } placeholder: { Theme.card2 }
+                            CachedImage(url: f) { $0.resizable().scaledToFill() } placeholder: { Theme.card2 }
                                 .frame(width: 18, height: 12).clipShape(RoundedRectangle(cornerRadius: 2))
                         }
                         Text(r.name).lineLimit(1).minimumScaleFactor(0.8)
@@ -438,7 +438,7 @@ private struct PlayerLine: View {
         return HStack {
             HStack(spacing: 8) {
                 if let f = p.flag {
-                    AsyncImage(url: f) { $0.resizable().scaledToFill() } placeholder: { Theme.card2 }
+                    CachedImage(url: f) { $0.resizable().scaledToFill() } placeholder: { Theme.card2 }
                         .frame(width: 20, height: 14)
                         .clipShape(RoundedRectangle(cornerRadius: 2))
                 }

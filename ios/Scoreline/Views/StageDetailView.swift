@@ -105,7 +105,7 @@ struct StageProfileCard: View {
         if let url = StageProfiles.imageURL(for: edition, stage: stage) {
             VStack(alignment: .leading, spacing: 8) {
                 CardTitle("Profile")
-                AsyncImage(url: url) { phase in
+                CachedImage(url: url) { phase in
                     switch phase {
                     case .success(let img):
                         img.resizable().scaledToFit()

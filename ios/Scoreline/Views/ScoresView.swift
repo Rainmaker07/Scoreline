@@ -268,10 +268,24 @@ struct MyTeamsCard: View {
     }
 
     static func load(_ favorites: [Favorite]) async -> [Game] {
+        // All teams in parallel, then merged in the order they were followed.
+        let picks = await withTaskGroup(of: (Int, [Game]).self) { group in
+            for (i, f) in favorites.enumerated() {
+                group.addTask { (i, await Self.games(for: f)) }
+            }
+            var byIndex: [Int: [Game]] = [:]
+            for await (i, g) in group { byIndex[i] = g }
+            return favorites.indices.flatMap { byIndex[$0] ?? [] }
+        }
         var out: [Game] = []
         var seen = Set<String>()
-        for f in favorites {
-            guard let league = f.league else { continue }
+        for g in picks where seen.insert(g.id).inserted { out.append(g) }
+        return out.sorted { ($0.state.sortRank, $0.date) < ($1.state.sortRank, $1.date) }
+    }
+
+    private static func games(for f: Favorite) async -> [Game] {
+        do {
+            guard let league = f.league else { return [] }
             let games: [Game]
             if league.provider == .bbl {
                 games = (try? await BBL.team(f.entityId).games) ?? []
@@ -300,8 +314,7 @@ struct MyTeamsCard: View {
                     pick = pick.map { g in board.first { $0.id == g.id } ?? g }
                 }
             }
-            for g in pick where seen.insert(g.id).inserted { out.append(g) }
+            return pick
         }
-        return out.sorted { ($0.state.sortRank, $0.date) < ($1.state.sortRank, $1.date) }
     }
 }

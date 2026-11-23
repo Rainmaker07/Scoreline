@@ -1,6 +1,6 @@
 # Scoreline for iPhone
 
-**Version 1.4 (build 5)**. The installed version is shown under Settings → About.
+**Version 1.5 (build 6)**. The installed version is shown under Settings → About.
 
 A native SwiftUI score tracker styled after Apple Sports.
 
@@ -31,10 +31,24 @@ A native SwiftUI score tracker styled after Apple Sports.
 * **Real time later:** `Services/Alerts.swift` defines an `AlertBackend` protocol. A future server-backed implementation (paid Apple Developer account + a small server such as a Cloudflare Worker sending APNs pushes) would receive the same `AlertSubscription` list and the Live Activity push tokens. The Live Activity's `ContentState` is already push-compatible.
 * The Live Activity lives in a widget extension (`ios/ScorelineWidgets`). Code shared by the app and the extension is in `ios/Shared`.
 
+## Checks and screenshots on every build
+
+Every push to `main` builds the app on GitHub, then runs it on an iPhone 13 simulator:
+
+* **Data source checks:** about 40 live checks of ESPN, easycredit-bbl.de, Wikipedia and FotMob
+  (standings, scores, box scores, lineups, team and player pages, tennis draws and rankings,
+  Grand Tours, WorldTour races, rider pages, logos and photos). The results appear in the run's
+  summary, and the build is marked failed if a source changed its format. The same checks can be
+  run on the phone under Settings → Check data sources.
+* **Screenshots** of the main screens (every league, game pages with lineups and stats, team and
+  player pages, NBA Cup, tennis, cycling, settings) are published to the
+  [`screenshots` branch](../../tree/screenshots) and attached to the run.
+
 ## Version history
 
 | Version | Changes |
 |---|---|
+| 1.5 (6) | Data source checks (Settings → Check data sources, and on every GitHub build), iPhone 13 simulator screenshots on every build, faster loading: image cache, instant tab switching and back navigation, My Teams loads in parallel |
 | 1.4 (5) | Notifications and Live Activities for followed teams and competitions; version number in Settings |
 | 1.3 (4) | Premiership Rugby, NBA Cup page, Stats tabs, all UCI WorldTour races, rider and team pages, tournament logos, Davis Cup and Laver Cup, rankings with flags and photos, expandable league menu |
 | 1.2 (3) | easyCredit BBL rename, iPhone 13 layout fixes, player photos for stat leaders, game detail tabs with formations, ATP 1000/500/250, ATP Finals and rankings, Europa League, Conference League, DFB-Pokal, FA Cup, NBA Cup |

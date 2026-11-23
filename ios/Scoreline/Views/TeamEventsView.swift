@@ -124,7 +124,7 @@ private struct TieRow: View {
     }
 
     private func flagImage(_ url: URL) -> some View {
-        AsyncImage(url: url) { $0.resizable().scaledToFill() } placeholder: { Theme.card2 }
+        CachedImage(url: url) { $0.resizable().scaledToFill() } placeholder: { Theme.card2 }
             .frame(width: 28, height: 19)
             .clipShape(RoundedRectangle(cornerRadius: 3))
     }

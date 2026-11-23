@@ -293,6 +293,17 @@ struct ScoresCard: View {
         }
         .padding(.horizontal, 14)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+        .task(id: "\(league.id)-\(refresh)") {
+            // Load the other two tabs in the background so switching is instant.
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            for t in ScoreTab.allCases where t != tab {
+                if Task.isCancelled { return }
+                if let games = try? await GameFeed.load(league, tab: t) {
+                    LoaderMemory.set("\(league.id)-\(t.rawValue)-\(refresh)", games)
+                    ImageStore.shared.prefetch(games.flatMap { [$0.home.logo, $0.away.logo] }.compactMap { $0 })
+                }
+            }
+        }
     }
 
     private var emptyText: String {

@@ -105,7 +105,7 @@ struct LogoView: View {
         let urls = LogoURL.candidates(url)
         Group {
             if attempt < urls.count {
-                AsyncImage(url: urls[attempt], transaction: Transaction(animation: .easeIn(duration: 0.15))) { phase in
+                CachedImage(url: urls[attempt]) { phase in
                     switch phase {
                     case .success(let img):
                         img.resizable().scaledToFit()

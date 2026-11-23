@@ -27,7 +27,8 @@ struct Loader<T, Content: View>: View {
         }
         .task(id: id) {
             if loadedID != id {
-                value = nil
+                // Show the last result for this page at once, then refresh it.
+                value = LoaderMemory.get(id) as? T
                 failure = nil
             }
             while !Task.isCancelled {
@@ -35,6 +36,7 @@ struct Loader<T, Content: View>: View {
                     let v = try await load()
                     if Task.isCancelled { return }
                     value = v
+                    LoaderMemory.set(id, v)
                     failure = nil
                     loadedID = id
                     guard let next = poll(v) else { return }
@@ -47,4 +49,17 @@ struct Loader<T, Content: View>: View {
             }
         }
     }
+}
+
+/// Last loaded value per page, so going back or switching tabs is instant.
+enum LoaderMemory {
+    private final class Box { let value: Any; init(_ v: Any) { value = v } }
+    private static let cache: NSCache<NSString, Box> = {
+        let c = NSCache<NSString, Box>()
+        c.countLimit = 200
+        return c
+    }()
+    static func get(_ id: String) -> Any? { cache.object(forKey: id as NSString)?.value }
+    static func set(_ id: String, _ value: Any) { cache.setObject(Box(value), forKey: id as NSString) }
+    static func clear() { cache.removeAllObjects() }
 }
