@@ -1,5 +1,5 @@
-// Live Activity / widget extension. Same team and settings as the app;
-// its bundle ID must be the app's ID plus a suffix.
+// Live Activity / widget extension. Same team and settings as the app
+// (including your Local.xcconfig). Its bundle ID, the app's ID plus
+// ".widgets", is set on the target in the project file: $(inherited) only
+// sees the xcconfig value from there.
 #include "Base.xcconfig"
-
-PRODUCT_BUNDLE_IDENTIFIER = $(inherited).widgets

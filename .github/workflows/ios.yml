@@ -25,6 +25,21 @@ jobs:
           sudo xcode-select -s "$(ls -d /Applications/Xcode_16*.app | sort -V | tail -1)"
           xcodebuild -version
 
+      - name: Check bundle IDs
+        working-directory: ios
+        run: |
+          # The widget extension must be <app ID>.widgets, also with a personal Local.xcconfig.
+          ids() { xcodebuild -project Scoreline.xcodeproj -target "$1" -showBuildSettings 2>/dev/null | awk '$1=="PRODUCT_BUNDLE_IDENTIFIER"{print $3}'; }
+          check() {
+            app=$(ids Scoreline); ext=$(ids ScorelineWidgets)
+            echo "app: $app  widgets: $ext"
+            [ -n "$app" ] && [ "$ext" = "$app.widgets" ] || { echo "::error::Widget bundle ID '$ext' is not '$app.widgets'"; exit 1; }
+          }
+          check
+          printf 'DEVELOPMENT_TEAM = ABCDE12345\nPRODUCT_BUNDLE_IDENTIFIER = com.example.scoreline\n' > Config/Local.xcconfig
+          check
+          rm Config/Local.xcconfig
+
       - name: Build (unsigned, device)
         working-directory: ios
         run: |

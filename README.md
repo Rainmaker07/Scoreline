@@ -1,6 +1,6 @@
 # Scoreline for iPhone
 
-**Version 1.5 (build 6)**. The installed version is shown under Settings → About.
+**Version 1.5.1 (build 7)**. The installed version is shown under Settings → About.
 
 A native SwiftUI score tracker styled after Apple Sports.
 
@@ -48,6 +48,7 @@ Every push to `main` builds the app on GitHub, then runs it on an iPhone 13 simu
 
 | Version | Changes |
 |---|---|
+| 1.5.1 (7) | Fix: the Live Activity extension's bundle ID was ".widgets" instead of the app ID plus ".widgets", so Xcode couldn't register it |
 | 1.5 (6) | Data source checks (Settings → Check data sources, and on every GitHub build), iPhone 13 simulator screenshots on every build, faster loading: image cache, instant tab switching and back navigation, My Teams loads in parallel |
 | 1.4 (5) | Notifications and Live Activities for followed teams and competitions; version number in Settings |
 | 1.3 (4) | Premiership Rugby, NBA Cup page, Stats tabs, all UCI WorldTour races, rider and team pages, tournament logos, Davis Cup and Laver Cup, rankings with flags and photos, expandable league menu |
