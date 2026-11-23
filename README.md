@@ -9,14 +9,16 @@ A native SwiftUI score tracker styled after Apple Sports.
 | Premier League, Bundesliga, 2. Bundesliga | Live scores with scorers, match events, lineups on a formation pitch, team stats, live tables with labelled zones, top scorers and assists |
 | Champions League, Europa League, Conference League | The same, with league-phase tables (Round of 16 / knockout play-offs / eliminated) |
 | DFB-Pokal, FA Cup | Results and fixtures by round, including penalties |
-| ATP | The full season: Grand Slams, Masters 1000, 500, 250, ATP Finals (group tables), Next Gen Finals, plus Davis Cup and Laver Cup from Wikipedia. Draws, live scores and ATP rankings. |
-| Cycling Grand Tours | Stages, stage results, GC after every stage, jersey holders, final classifications, stage reports, rider pages |
+| Premiership Rugby | Live scores, scoring events (tries, conversions, penalties), lineups, table with bonus points and play-off zone |
+| ATP World Tour | The full season, with tournament logos: Grand Slams, Masters 1000, 500, 250, ATP Finals (group tables), Next Gen Finals, plus Davis Cup and Laver Cup from Wikipedia. Draws, live scores and ATP rankings. |
+| UCI World Tour | Grand Tours in full, plus the whole WorldTour calendar: stage races (stages, GC, jerseys) and one-day races (results, Monuments). Rider pages (team history, major wins, season results) and team pages (roster, season wins). |
 
 **Everywhere:**
 * An Apple Sports-style league switcher with search and live league status.
 * Favourite teams, players and riders, with a My Teams section on Home.
 * Tap any team or player to open their page: schedule, roster, stats, game log and career.
   Football teams and players can be filtered by competition (league, cup or European).
+* Football player photos come from FotMob, matched by name and club.
 
 ## Install on your iPhone (always up to date)
 

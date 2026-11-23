@@ -296,7 +296,7 @@ enum CyclingService {
         let hasFinal = tables.contains { $0.caption.lowercased().hasPrefix("final general") }
 
         // Stage-by-stage results, GC after each stage, and reports
-        for page in stagePages {
+        for page in [main] + stagePages {
             for t in WikiHTML.tables(in: page) {
                 let c = t.caption.lowercased()
                 if c.hasPrefix("stage"), c.contains("result"), let n = firstNumber(String(c.dropFirst(6))),
