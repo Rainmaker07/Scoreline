@@ -93,6 +93,7 @@ struct GameHero: View {
             if let note, !note.isEmpty {
                 Text(note).font(.footnote).foregroundStyle(.white.opacity(0.75)).multilineTextAlignment(.center)
             }
+            LiveActivityButton(game: game)
         }
         .padding(.horizontal, 16)
         .padding(.top, embedded ? 8 : 18)

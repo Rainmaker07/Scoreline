@@ -22,6 +22,10 @@ final class AppStore: ObservableObject {
     @Published var favorites: [Favorite] { didSet { save(favorites, "favorites") } }
     @Published var leagueOrder: [String] { didSet { save(leagueOrder, "leagueOrder") } }
     @Published var hiddenLeagues: Set<String> { didSet { save(Array(hiddenLeagues), "hiddenLeagues") } }
+    /// Notification / Live Activity preferences, keyed by Favorite.id or "league:<id>".
+    @Published var alertPrefs: [String: AlertPrefs] { didSet { save(alertPrefs, "alertPrefs") } }
+    /// Competitions followed for alerts (league ids).
+    @Published var followedCompetitions: Set<String> { didSet { save(Array(followedCompetitions), "followedCompetitions") } }
 
     private init() {
         favorites = Self.load("favorites") ?? []
@@ -29,6 +33,8 @@ final class AppStore: ObservableObject {
         // Add leagues introduced after the user saved an order.
         leagueOrder = order.filter { League.byId($0) != nil } + League.all.map(\.id).filter { !order.contains($0) }
         hiddenLeagues = Set(Self.load("hiddenLeagues") ?? [String]())
+        alertPrefs = Self.load("alertPrefs") ?? [:]
+        followedCompetitions = Set(Self.load("followedCompetitions") ?? [String]())
     }
 
     var visibleLeagues: [League] {

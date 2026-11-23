@@ -20,6 +20,15 @@ A native SwiftUI score tracker styled after Apple Sports.
   Football teams and players can be filtered by competition (league, cup or European).
 * Football player photos come from FotMob, matched by name and club.
 
+## Notifications and Live Activities
+
+* Follow a team, player or rider (star or bell on their page), or a competition (bell on the league page).
+* **Per subscription:** a 15-minute start reminder, kick-off, goals/tries/runs, half-time and period ends, the final result, and an automatic Lock Screen Live Activity.
+* Game pages have a **Live Activity** button for one-off games.
+* **How updates arrive now:** they're local. While the app is open it checks every minute; while it's closed, iOS background refresh decides when it may check (typically every 15–60 minutes). Start reminders are scheduled ahead and are always on time.
+* **Real time later:** `Services/Alerts.swift` defines an `AlertBackend` protocol. A future server-backed implementation (paid Apple Developer account + a small server such as a Cloudflare Worker sending APNs pushes) would receive the same `AlertSubscription` list and the Live Activity push tokens. The Live Activity's `ContentState` is already push-compatible.
+* The Live Activity lives in a widget extension (`ios/ScorelineWidgets`). Code shared by the app and the extension is in `ios/Shared`.
+
 ## Install on your iPhone (always up to date)
 
 **Requirements:** a Mac with Xcode 16 or newer, and your Apple ID added in Xcode (Settings → Accounts).

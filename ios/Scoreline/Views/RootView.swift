@@ -370,6 +370,7 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             List {
+                NotificationSettingsSection()
                 Section("Data") {
                     Button(cleared ? "Cache cleared" : "Clear cached data") {
                         Task {

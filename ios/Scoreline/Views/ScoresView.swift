@@ -55,6 +55,11 @@ struct LeaguePage: View {
                 }
                 .buttonStyle(.plain)
             }
+            HStack {
+                Spacer()
+                Text("Alerts").font(.footnote.weight(.semibold)).foregroundStyle(Theme.secondary)
+                AlertBell(key: "league:\(league.id)", title: league.name, competition: true)
+            }
             if league.hasStatLeaders {
                 Picker("", selection: $tab) {
                     Text(firstTitle).tag(0)

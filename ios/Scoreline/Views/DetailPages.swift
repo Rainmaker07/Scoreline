@@ -124,6 +124,8 @@ struct TeamView: View {
                         trailing: AnyView(HStack(spacing: 10) {
                             FormBadges(form: t.form)
                             FavoriteButton(favorite: Favorite(leagueId: leagueId, entityId: teamId, name: t.name, abbr: t.abbr, logo: t.logo))
+                            let fav = Favorite(leagueId: leagueId, entityId: teamId, name: t.name, abbr: t.abbr, logo: t.logo)
+                            AlertBell(key: fav.id, title: t.name, favorite: fav)
                         })
                     )
                     VStack(spacing: 14) {

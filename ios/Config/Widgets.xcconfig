@@ -1,0 +1,5 @@
+// Live Activity / widget extension. Same team and settings as the app;
+// its bundle ID must be the app's ID plus a suffix.
+#include "Base.xcconfig"
+
+PRODUCT_BUNDLE_IDENTIFIER = $(inherited).widgets
