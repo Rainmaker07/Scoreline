@@ -91,36 +91,45 @@ struct RootView: View {
     }
 
     private var topBar: some View {
-        HStack(alignment: .center) {
-            Text("Scoreline")
-                .font(.system(size: 34, weight: .heavy))
-                .lineLimit(1)
-                .minimumScaleFactor(0.6)
-                .layoutPriority(0)
-            Spacer(minLength: 12)
+        HStack(alignment: .center, spacing: 10) {
+            if let league {
+                // League pages: the league is the title; the switcher shows just its icon.
+                LeagueIcon(league: league, size: 32)
+                Text(league.name)
+                    .font(.system(size: 28, weight: .heavy))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.55)
+            } else {
+                Text("Scoreline")
+                    .font(.system(size: 34, weight: .heavy))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+            }
+            Spacer(minLength: 8)
+            if let league, league.family != .tennis, league.family != .cycling {
+                AlertBell(key: "league:\(league.id)", title: league.name, competition: true)
+            }
             Button {
                 withAnimation(.spring(response: 0.32, dampingFraction: 0.85)) { menuOpen.toggle() }
             } label: {
-                HStack(spacing: 8) {
+                HStack(spacing: 6) {
                     if let league {
                         LeagueIcon(league: league, size: 22)
-                        ViewThatFits(in: .horizontal) {
-                            Text(league.short).lineLimit(1)
-                            Text(league.pillShort).lineLimit(1)
-                        }
                     } else {
                         Image(systemName: "house.fill")
-                        Text("Home")
                     }
+                    Image(systemName: "chevron.down")
+                        .font(.caption.weight(.bold))
+                        .rotationEffect(.degrees(menuOpen ? 180 : 0))
                 }
                 .font(.headline)
-                .padding(.horizontal, 16)
+                .padding(.horizontal, 14)
                 .padding(.vertical, 10)
                 .background(.ultraThinMaterial, in: Capsule())
                 .overlay(Capsule().stroke(.white.opacity(0.18), lineWidth: 1))
             }
             .buttonStyle(.plain)
-            .layoutPriority(1)
+            .accessibilityLabel(league.map { "Switch league, current: \($0.name)" } ?? "Switch league")
         }
         .padding(.top, 8)
     }

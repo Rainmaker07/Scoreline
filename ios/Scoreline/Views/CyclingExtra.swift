@@ -11,13 +11,11 @@ struct WorldTourList: View {
         let thisYear = Calendar.current.component(.year, from: Date())
         VStack(alignment: .leading, spacing: 12) {
             ChipRow(items: [thisYear, thisYear - 1, thisYear - 2], selected: year, title: { String($0) }) { year = $0 }
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 6) {
+            ChipScroll {
                     ForEach(Array(["All", "Grand Tours", "Stage races", "One-day races"].enumerated()), id: \.offset) { i, t in
                         Chip(title: t, selected: filter == i) { filter = i }
                     }
                 }
-            }
             Loader(id: "wt-\(year)-\(refresh)", load: { try await WorldTour.calendar(year) }) { races in
                 let list = races.filter { r in
                     switch filter {

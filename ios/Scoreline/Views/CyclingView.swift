@@ -160,8 +160,7 @@ struct EditionBody: View {
         let def = edition.def
         let list: [RiderResult] = showTeams ? edition.teams : (edition.classifications[jersey] ?? [])
         return VStack(alignment: .leading, spacing: 12) {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 6) {
+            ChipScroll {
                     ForEach(JerseyKey.allCases, id: \.self) { k in
                         Chip(title: classTitle(k), selected: !showTeams && jersey == k) { jersey = k; showTeams = false }
                     }
@@ -169,7 +168,6 @@ struct EditionBody: View {
                         Chip(title: "Teams", selected: showTeams) { showTeams = true }
                     }
                 }
-            }
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 8) {
                     if !showTeams { JerseyBadge(color: def.jersey(jersey).color, size: 18) }

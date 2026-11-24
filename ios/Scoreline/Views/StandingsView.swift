@@ -223,11 +223,9 @@ struct StandingsSection: View {
     var body: some View {
         VStack(spacing: 12) {
             if (league.family == .basketball || league.family == .baseball) && league.provider == .espn {
-                Picker("", selection: $divisions) {
-                    Text(league.family == .baseball ? "League" : "Conference").tag(false)
-                    Text("Division").tag(true)
+                TextTabs(items: [false, true], selection: $divisions) {
+                    $0 ? "Division" : (league.family == .baseball ? "League" : "Conference")
                 }
-                .pickerStyle(.segmented)
             }
             Loader(id: "\(league.id)-standings-\(divisions)-\(refresh)",
                    poll: { (d: StandingsData) in d.liveGames.isEmpty ? nil : 30 },

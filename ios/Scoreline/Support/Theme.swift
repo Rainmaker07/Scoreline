@@ -200,6 +200,47 @@ struct Chip: View {
     }
 }
 
+/// Horizontal chip row that scrolls edge to edge: chips slide under the screen edge
+/// instead of being cut off at the page's 16-pt margin.
+struct ChipScroll<Content: View>: View {
+    @ViewBuilder let content: () -> Content
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) { content() }
+                .padding(.horizontal, 16)
+        }
+        .padding(.horizontal, -16)
+    }
+}
+
+/// Light secondary tabs (text with an underline), used under a segmented control
+/// so two switches don't stack as heavy bars.
+struct TextTabs<Item: Hashable>: View {
+    let items: [Item]
+    @Binding var selection: Item
+    let title: (Item) -> String
+
+    var body: some View {
+        HStack(spacing: 18) {
+            ForEach(items, id: \.self) { item in
+                let on = item == selection
+                Button { withAnimation(.snappy) { selection = item } } label: {
+                    VStack(spacing: 4) {
+                        Text(title(item))
+                            .font(.subheadline.weight(on ? .bold : .medium))
+                            .foregroundStyle(on ? Color.white : Theme.secondary)
+                        Capsule().fill(on ? Color.white : .clear).frame(height: 2)
+                    }
+                    .fixedSize(horizontal: true, vertical: false)
+                }
+                .buttonStyle(.plain)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 4)
+    }
+}
+
 struct ChipRow<Item: Hashable>: View {
     let items: [Item]
     let selected: Item?
@@ -208,14 +249,12 @@ struct ChipRow<Item: Hashable>: View {
 
     var body: some View {
         ScrollViewReader { proxy in
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 6) {
+            ChipScroll {
                     ForEach(items, id: \.self) { item in
                         Chip(title: title(item), selected: item == selected) { onSelect(item) }
                             .id(item)
                     }
                 }
-            }
             .onAppear { if let selected { proxy.scrollTo(selected, anchor: .center) } }
         }
     }
@@ -342,5 +381,41 @@ enum Fmt {
         let date = t[r].trimmingCharacters(in: .whitespaces)
         let place = t[..<r.lowerBound].trimmingCharacters(in: CharacterSet(charactersIn: " ,"))
         return place.isEmpty ? date : "\(place) · \(date)"
+    }
+}
+
+/// Metric units and German dates for ESPN's US-style bio fields.
+enum Units {
+    /// 6' 8" -> 203 cm (already-metric values are kept).
+    static func height(_ s: String?) -> String? {
+        guard let s, !s.isEmpty else { return nil }
+        let ns = s as NSString
+        if let re = try? NSRegularExpression(pattern: #"(\d+)\s*'\s*(\d+)?"#),
+           let m = re.firstMatch(in: s, range: NSRange(location: 0, length: ns.length)) {
+            let ft = Double(ns.substring(with: m.range(at: 1))) ?? 0
+            let inch = m.range(at: 2).location == NSNotFound ? 0 : Double(ns.substring(with: m.range(at: 2))) ?? 0
+            return "\(Int(((ft * 12 + inch) * 2.54).rounded())) cm"
+        }
+        return s
+    }
+
+    /// 203 lbs -> 92 kg
+    static func weight(_ s: String?) -> String? {
+        guard let s, !s.isEmpty else { return nil }
+        if s.lowercased().contains("lb"), let n = Double(s.filter { $0.isNumber || $0 == "." }) {
+            return "\(Int((n * 0.45359237).rounded())) kg"
+        }
+        return s
+    }
+
+    /// ESPN "2/11/2001" (US month/day) or "20/4/1997" (day first) -> "11. Feb. 2001".
+    static func birthDate(_ s: String?, dayFirst: Bool = false) -> String? {
+        guard let s, !s.isEmpty else { return nil }
+        let parts = s.split(separator: "/").compactMap { Int($0) }
+        guard parts.count == 3 else { return s }
+        var (m, d) = dayFirst ? (parts[1], parts[0]) : (parts[0], parts[1])
+        if m > 12 { swap(&m, &d) }
+        guard let date = Calendar.current.date(from: DateComponents(year: parts[2], month: m, day: d)) else { return s }
+        return Fmt.dateYear(date)
     }
 }

@@ -86,7 +86,8 @@ struct PitchView: View {
                     team(home.lines, color: home.side.tintHex, top: false, w: w, h: h)
                 }
             }
-            .aspectRatio(0.66, contentMode: .fit)
+            // Taller than a real pitch so five lines per team (e.g. 4-2-3-1) have room.
+            .aspectRatio(0.56, contentMode: .fit)
             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             label(home.side, home.formation)
         }
@@ -123,14 +124,18 @@ struct PitchView: View {
         }
     }
 
-    /// Lines spread over half the pitch; away mirrored so its left wing is on screen right.
+    /// Lines spread over each team's own half (with a gap at the halfway line so the two
+    /// front lines don't collide); away mirrored so its left wing is on screen right.
     private func team(_ lines: [[PitchPlayer]], color: String?, top: Bool, w: CGFloat, h: CGFloat) -> some View {
         let half = h / 2
         let n = max(lines.count, 1)
+        let edge: CGFloat = 32          // keeper (and name) clear of the goal line
+        let centreGap: CGFloat = 30     // forwards stay this far from halfway
+        let span = half - edge - centreGap
         return ZStack {
             ForEach(Array(lines.enumerated()), id: \.offset) { li, line in
-                let frac = n == 1 ? 0.1 : 0.09 + 0.82 * CGFloat(li) / CGFloat(n - 1) * 0.95
-                let y = top ? half * frac : h - half * frac
+                let d = n == 1 ? edge : edge + span * CGFloat(li) / CGFloat(n - 1)
+                let y = top ? d : h - d
                 ForEach(Array(line.enumerated()), id: \.element.id) { pi, p in
                     let xFrac = (CGFloat(pi) + 1) / CGFloat(line.count + 1)
                     let x = top ? w * (1 - xFrac) : w * xFrac
@@ -138,7 +143,8 @@ struct PitchView: View {
                         marker(p, color: color)
                     }
                     .buttonStyle(.plain)
-                    .position(x: x, y: y)
+                    // Anchor on the shirt circle (the name hangs below it).
+                    .position(x: x, y: y + 8)
                 }
             }
         }
@@ -146,30 +152,49 @@ struct PitchView: View {
 
     private func marker(_ p: PitchPlayer, color: String?) -> some View {
         let fill = Color.visibleTint(color) ?? Color(white: 0.85)
-        return VStack(spacing: 2) {
-            ZStack(alignment: .topTrailing) {
-                Text(p.number)
-                    .font(.system(size: 12, weight: .heavy))
-                    .foregroundStyle(.white)
-                    .frame(width: 28, height: 28)
-                    .background(fill, in: Circle())
-                    .overlay(Circle().stroke(.white.opacity(0.8), lineWidth: 1.5))
-                HStack(spacing: 1) {
-                    if p.goals > 0 { Text(p.goals > 1 ? "⚽\(p.goals)" : "⚽").font(.system(size: 9)) }
-                    if p.red { RoundedRectangle(cornerRadius: 1).fill(Color.red).frame(width: 6, height: 8) }
-                    else if p.yellow { RoundedRectangle(cornerRadius: 1).fill(Color.yellow).frame(width: 6, height: 8) }
-                }
-                .offset(x: 10, y: -4)
-            }
-            Text(p.name)
-                .font(.system(size: 9, weight: .semibold))
+        let shadow = Color.black.opacity(0.85)
+        return VStack(spacing: 1) {
+            Text(p.number)
+                .font(.system(size: 12, weight: .heavy))
                 .foregroundStyle(.white)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-                .frame(maxWidth: 62)
-            if let off = p.subbedOff {
-                Text("↓ \(off)").font(.system(size: 8, weight: .bold)).foregroundStyle(Color(hex: "ff9f0a"))
+                .frame(width: 26, height: 26)
+                .background(fill, in: Circle())
+                .overlay(Circle().stroke(.white.opacity(0.85), lineWidth: 1.5))
+                // Goals top right, cards top left: always the same spot on the circle.
+                .overlay(alignment: .topTrailing) {
+                    if p.goals > 0 {
+                        HStack(spacing: 0) {
+                            Text("⚽").font(.system(size: 9))
+                            if p.goals > 1 { Text("\(p.goals)").font(.system(size: 8, weight: .heavy)).foregroundStyle(.white) }
+                        }
+                        .padding(.horizontal, 2)
+                        .background(Color.black.opacity(0.55), in: Capsule())
+                        .offset(x: 9, y: -6)
+                    }
+                }
+                .overlay(alignment: .topLeading) {
+                    if p.red || p.yellow {
+                        RoundedRectangle(cornerRadius: 1.5).fill(p.red ? Color.red : Color.yellow)
+                            .frame(width: 7, height: 10)
+                            .overlay(RoundedRectangle(cornerRadius: 1.5).stroke(.black.opacity(0.4), lineWidth: 0.5))
+                            .offset(x: -5, y: -4)
+                    }
+                }
+            HStack(spacing: 3) {
+                Text(p.name)
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(.white)
+                if let off = p.subbedOff {
+                    Text("↓\(off)").font(.system(size: 8, weight: .heavy)).foregroundStyle(Color(hex: "ffb340"))
+                }
             }
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+            .padding(.horizontal, 4)
+            .padding(.vertical, 1)
+            .background(Color.black.opacity(0.35), in: Capsule())
+            .shadow(color: shadow, radius: 1)
+            .frame(maxWidth: 76)
         }
     }
 }

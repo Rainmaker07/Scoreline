@@ -14,6 +14,13 @@ struct LeagueScreen: View {
         .navigationTitle(league.name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)
+        .toolbar {
+            if league.family != .tennis && league.family != .cycling {
+                ToolbarItem(placement: .topBarTrailing) {
+                    AlertBell(key: "league:\(league.id)", title: league.name, competition: true)
+                }
+            }
+        }
         .sheet(item: $openGame) { g in
             NavigationStack {
                 GameDetailView(game: g).navigationDestination(for: Route.self) { RouteView(route: $0) }
@@ -54,11 +61,6 @@ struct LeaguePage: View {
                     .card()
                 }
                 .buttonStyle(.plain)
-            }
-            HStack {
-                Spacer()
-                Text("Alerts").font(.footnote.weight(.semibold)).foregroundStyle(Theme.secondary)
-                AlertBell(key: "league:\(league.id)", title: league.name, competition: true)
             }
             if league.hasStatLeaders {
                 Picker("", selection: $tab) {

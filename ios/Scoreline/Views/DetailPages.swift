@@ -28,31 +28,57 @@ struct InfoList: View {
 /// Wide stat table: first column pinned, values scroll sideways if needed.
 struct StatTableView: View {
     let table: StatTable
+    /// Optional destination per row (game log rows open the game).
+    var routes: [Route?] = []
+
+    private func route(_ i: Int) -> Route? { i < routes.count ? routes[i] : nil }
+
+    @ViewBuilder private func linked<C: View>(_ i: Int, @ViewBuilder _ c: () -> C) -> some View {
+        if let r = route(i) {
+            NavigationLink(value: r) { c().contentShape(Rectangle()) }.buttonStyle(.plain)
+        } else {
+            c()
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             CardTitle(table.title)
             HStack(alignment: .top, spacing: 0) {
                 VStack(alignment: .leading, spacing: 0) {
                     Text("").frame(height: 22)
-                    ForEach(Array(table.rows.enumerated()), id: \.offset) { _, r in
-                        Text(r.name).font(.footnote.weight(.semibold)).lineLimit(1).minimumScaleFactor(0.7).frame(height: 30, alignment: .leading)
+                    ForEach(Array(table.rows.enumerated()), id: \.offset) { i, r in
+                        linked(i) {
+                            HStack(spacing: 5) {
+                                if i < table.rowLogos.count {
+                                    LogoView(url: table.rowLogos[i], fallback: "", size: 16)
+                                }
+                                Text(r.name).font(.footnote.weight(.semibold)).lineLimit(1).minimumScaleFactor(0.7)
+                                if route(i) != nil {
+                                    Image(systemName: "chevron.right").font(.system(size: 9, weight: .bold)).foregroundStyle(Theme.tertiary)
+                                }
+                            }
+                            .frame(height: 30, alignment: .leading)
+                        }
                     }
                 }
-                .frame(width: 104, alignment: .leading)
+                .frame(width: table.rowLogos.isEmpty && routes.isEmpty ? 104 : 124, alignment: .leading)
                 ScrollView(.horizontal, showsIndicators: false) {
                     VStack(alignment: .trailing, spacing: 0) {
                         HStack(spacing: 0) {
-                            ForEach(Array(table.labels.enumerated()), id: \.offset) { cell($0.element) }
+                            ForEach(Array(table.labels.enumerated()), id: \.offset) { cell($0.element, $0.offset) }
                         }
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(Theme.secondary)
                         .frame(height: 22)
-                        ForEach(Array(table.rows.enumerated()), id: \.offset) { _, r in
-                            HStack(spacing: 0) {
-                                ForEach(Array(r.values.enumerated()), id: \.offset) { cell($0.element) }
+                        ForEach(Array(table.rows.enumerated()), id: \.offset) { i, r in
+                            linked(i) {
+                                HStack(spacing: 0) {
+                                    ForEach(Array(r.values.enumerated()), id: \.offset) { cell($0.element, $0.offset) }
+                                }
+                                .font(.footnote)
+                                .frame(height: 30)
                             }
-                            .font(.footnote)
-                            .frame(height: 30)
                         }
                     }
                     .monospacedDigit()
@@ -62,8 +88,19 @@ struct StatTableView: View {
         .card()
     }
 
-    private func cell(_ t: String) -> some View {
-        Text(t).lineLimit(1).frame(minWidth: 46, alignment: .trailing).padding(.horizontal, 2)
+    /// Every row uses the same width per column, so values line up ("235-365" no longer shifts).
+    private var widths: [CGFloat] {
+        let n = max(table.labels.count, table.rows.map(\.values.count).max() ?? 0)
+        return (0..<n).map { i in
+            let longest = ([i < table.labels.count ? table.labels[i] : ""] + table.rows.map { i < $0.values.count ? $0.values[i] : "" })
+                .map(\.count).max() ?? 0
+            return max(40, CGFloat(longest) * 7.6 + 10)
+        }
+    }
+
+    private func cell(_ t: String, _ i: Int) -> some View {
+        let w = i < widths.count ? widths[i] : 46
+        return Text(t).lineLimit(1).frame(width: w, alignment: .trailing)
     }
 }
 
@@ -191,8 +228,7 @@ struct CompetitionSwitcher: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 6) {
+            ChipScroll {
                     Chip(title: "All", selected: selected == nil) { selected = nil }
                     ForEach(competitions) { c in
                         Button { selected = c.id } label: {
@@ -209,7 +245,6 @@ struct CompetitionSwitcher: View {
                         .buttonStyle(.plain)
                     }
                 }
-            }
             if let id = selected, let c = League.byId(id) {
                 NavigationLink(value: Route.league(c.id)) {
                     HStack(spacing: 6) {
@@ -397,8 +432,11 @@ struct PlayerView: View {
                             InfoList(title: "This season", rows: p.seasonStats)
                         }
                         let log = competition.map { c in p.gameLog.filter { Self.matches($0.league, c) } } ?? p.gameLog
-                        if !log.isEmpty { GameLogView(labels: p.gameLogLabels, entries: Array(log.prefix(10))) }
+                        if !log.isEmpty { GameLogView(league: league, labels: p.gameLogLabels, entries: Array(log.prefix(10))) }
                         ForEach(Array(p.tables.enumerated()), id: \.offset) { _, t in StatTableView(table: t) }
+                        if p.seasonStats.isEmpty && p.tables.isEmpty && p.gameLog.isEmpty && p.competitionStats.isEmpty {
+                            MessageCard(text: "\(p.name) hasn’t played in the \(league.short) yet, so there are no stats.")
+                        }
                         InfoList(title: "Bio", rows: p.bio)
                     }
                     .padding(.horizontal, 16)
@@ -414,15 +452,25 @@ struct PlayerView: View {
 }
 
 private struct GameLogView: View {
+    let league: League
     let labels: [String]
     let entries: [GameLogEntry]
+
+    /// A stand-in game: the game page loads everything else from the event id.
+    private func route(_ e: GameLogEntry) -> Route? {
+        guard league.provider == .espn, !e.id.isEmpty else { return nil }
+        let blank = ESPN.side(J(nil))
+        return .game(Game(id: e.id, leagueId: league.id, date: e.date ?? Date(), state: .post, statusText: "Final",
+                          home: blank, away: blank, note: nil, broadcast: nil, scorers: []))
+    }
 
     var body: some View {
         let rows = entries.map { e -> (name: String, values: [String]) in
             let date = e.date.map { Fmt.numeric($0) } ?? ""
             return ("\(date) \(e.atVs) \(e.opponent)", [e.result + " " + e.score] + e.stats)
         }
-        StatTableView(table: StatTable(title: "Last \(entries.count) games", labels: ["Result"] + labels, rows: rows))
+        StatTableView(table: StatTable(title: "Last \(entries.count) games", labels: ["Result"] + labels, rows: rows),
+                      routes: entries.map(route))
     }
 }
 
@@ -552,8 +600,8 @@ struct TennisPlayerInfo {
         var bio: [InfoRow] = []
         func add(_ l: String, _ v: String?) { if let v, !v.isEmpty { bio.append(InfoRow(label: l, value: v)) } }
         add("Age", a["age"].int.map(String.init))
-        add("Born", a["displayDOB"].string)
-        add("Height / Weight", [a["displayHeight"].string, a["displayWeight"].string].compactMap { $0 }.joined(separator: " · "))
+        add("Born", Units.birthDate(a["displayDOB"].string, dayFirst: true))
+        add("Height / Weight", [Units.height(a["displayHeight"].string), Units.weight(a["displayWeight"].string)].compactMap { $0 }.joined(separator: " · "))
         add("Plays", a["hand"]["displayValue"].string)
         add("Turned pro", a["debutYear"].int.map(String.init))
         let summary = a["statsSummary"]["statistics"].array.map { InfoRow(label: $0["displayName"].str, value: $0["displayValue"].str) }

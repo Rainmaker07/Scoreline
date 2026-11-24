@@ -23,6 +23,8 @@ struct StatTable: Hashable {
     let title: String
     let labels: [String]
     let rows: [(name: String, values: [String])]
+    /// Optional team logo per row (career tables).
+    var rowLogos: [URL?] = []
 
     static func == (a: StatTable, b: StatTable) -> Bool { a.title == b.title && a.labels == b.labels && a.rows.map(\.name) == b.rows.map(\.name) }
     func hash(into h: inout Hasher) { h.combine(title); h.combine(labels) }
@@ -325,7 +327,7 @@ extension ESPN {
             jersey: p["jersey"].string,
             position: p["position"]["abbreviation"].string,
             age: p["age"].int,
-            height: p["displayHeight"].string,
+            height: Units.height(p["displayHeight"].string),
             headshot: p["headshot"]["href"].url,
             group: group
         )
@@ -365,8 +367,8 @@ extension ESPN {
         add("Position", a["position"]["displayName"].string)
         add("Number", a["displayJersey"].string)
         add("Age", a["age"].int.map(String.init))
-        add("Born", [a["displayDOB"].string, a["displayBirthPlace"].string].compactMap { $0 }.joined(separator: " · "))
-        add("Height / Weight", [a["displayHeight"].string, a["displayWeight"].string].compactMap { $0 }.joined(separator: " · "))
+        add("Born", [Units.birthDate(a["displayDOB"].string), a["displayBirthPlace"].string].compactMap { $0 }.joined(separator: " · "))
+        add("Height / Weight", [Units.height(a["displayHeight"].string), Units.weight(a["displayWeight"].string)].compactMap { $0 }.joined(separator: " · "))
         add("Nationality", a["citizenship"].string)
         add("Experience", a["displayExperience"].string)
         add("Draft", a["displayDraft"].string)
@@ -394,12 +396,26 @@ extension ESPN {
                 season = zip(labels, first["stats"].array.map(\.str)).map { InfoRow(label: $0, value: $1) }
             }
         }
-        for c in st["categories"].array.prefix(3) {
-            let rows = c["statistics"].array.suffix(8).reversed().map { s in
-                (s["season"]["displayName"].str + (s["teamSlug"].string.map { " " + $0.uppercased() } ?? ""), s["stats"].array.map(\.str))
+        // Career: "2026-27 · OKC" with the team logo; a season split between teams gets a "Total" row.
+        // NBA: averages only (totals and misc totals are left out).
+        let teamsBySlug = st["teams"]
+        let careerCats = st["categories"].array.filter { league.id != "nba" || $0["name"].str == "averages" || $0["name"].str.contains("postseasonAverages") }
+        for c in careerCats.prefix(3) {
+            let lines = Array(c["statistics"].array.suffix(8).reversed())
+            var rows: [(name: String, values: [String])] = []
+            var logos: [URL?] = []
+            for s in lines {
+                let season = s["season"]["displayName"].str
+                let team = teamsBySlug[s["teamSlug"].str]
+                let abbr = team["abbreviation"].string
+                    ?? (s["teamSlug"].string.map { _ in "Total" } ?? "")
+                rows.append((abbr.isEmpty ? season : "\(season) · \(abbr)", s["stats"].array.map(\.str)))
+                logos.append(team["logos"].array.first { $0["rel"].array.contains { $0.str == "dark" } }?["href"].url
+                             ?? team["logos"][0]["href"].url)
             }
             if !rows.isEmpty {
-                tables.append(StatTable(title: "Career · " + c["displayName"].str, labels: c["labels"].array.map(\.str), rows: rows))
+                tables.append(StatTable(title: "Career · " + c["displayName"].str, labels: c["labels"].array.map(\.str),
+                                        rows: rows, rowLogos: logos))
             }
         }
 

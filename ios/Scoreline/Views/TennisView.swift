@@ -27,14 +27,12 @@ private struct TournamentList: View {
         let thisYear = Calendar.current.component(.year, from: Date())
         VStack(alignment: .leading, spacing: 12) {
             ChipRow(items: [thisYear, thisYear - 1, thisYear - 2], selected: year, title: { String($0) }) { year = $0 }
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 6) {
+            ChipScroll {
                     Chip(title: "All", selected: tier == nil) { tier = nil }
                     ForEach(TennisTier.allCases, id: \.self) { t in
                         Chip(title: t.label, selected: tier == t) { tier = t }
                     }
                 }
-            }
             Loader(id: "season-\(year)-\(refresh)", load: { try await Tennis.season(year) }) { all in
                 let list = all.filter { tier == nil || $0.tier == tier }
                 let live = list.filter(\.isLive)
