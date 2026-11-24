@@ -58,6 +58,8 @@ struct TeamPage {
     var form: [String]
     /// Competitions the team plays in (football: league, cups, Europe).
     var competitions: [League] = []
+    /// Full team statistics (MLB: hitting/pitching/fielding, NBA: general/offense/defense).
+    var statSections: [(title: String, rows: [InfoRow])] = []
 }
 
 struct PlayerPage {
@@ -207,15 +209,18 @@ extension ESPN {
                          ("Points for", "pointsFor"), ("Points against", "pointsAgainst"), ("Tries for", "triesFor"),
                          ("Bonus points", "bonusPoints"), ("League points", "points")]
                 .compactMap { pair in s[pair.1].map { InfoRow(label: pair.0, value: $0) } }
+            let squad = await RugbySquad.load(teamName: row?.name ?? "")
             return TeamPage(league: league, id: id, name: row?.name ?? "", abbr: row?.abbr ?? "", logo: row?.logo,
                             color: nil, record: s["overall"].map { _ in "\(s["gamesWon"] ?? "0")-\(s["gamesDrawn"] ?? "0")-\(s["gamesLost"] ?? "0")" },
                             standing: s["rank"].map { "\(BBL.ordinal(Int($0) ?? 0)) in Premiership Rugby" },
-                            games: games, roster: [], stats: stats, injuries: [], form: form)
+                            games: games, roster: squad, stats: stats, injuries: [], form: form)
         }
         let base = "\(site)/\(path)/teams/\(id)"
         async let infoJ = HTTP.shared.json(URL(string: base)!, maxAge: 600)
         async let schedJ = HTTP.shared.json(URL(string: "\(base)/schedule")!, maxAge: 300)
         async let rosterJ = HTTP.shared.json(URL(string: "\(base)/roster")!, maxAge: 3600)
+        // Regular season explicitly: in the off-season ESPN's default is the postseason.
+        async let teamStatsJ = HTTP.shared.json(URL(string: "\(base)/statistics?seasontype=2")!, maxAge: 3600)
         let info = (try await infoJ)["team"]
         let events = (try? await schedJ)?["events"].array ?? []
         let roster = (try? await rosterJ) ?? J(nil)
@@ -307,7 +312,23 @@ extension ESPN {
             return a > b ? "W" : a < b ? "L" : "D"
         }
 
-        return TeamPage(
+        var sections: [(title: String, rows: [InfoRow])] = []
+        if league.family != .soccer, let ts = try? await teamStatsJ {
+            let titles = ["batting": "Hitting", "pitching": "Pitching", "fielding": "Fielding",
+                          "general": "General", "offensive": "Offense", "defensive": "Defense"]
+            for c in ts["results"]["stats"]["categories"].array {
+                let rows = c["stats"].array.compactMap { s -> InfoRow? in
+                    guard let v = s["displayValue"].string, !v.isEmpty, s["name"].str != "teamGamesPlayed" else { return nil }
+                    let rank = s["rankDisplayValue"].string.map { " (\($0))" } ?? ""
+                    return InfoRow(label: s["displayName"].string ?? s["name"].str, value: v + rank)
+                }
+                if !rows.isEmpty {
+                    sections.append((titles[c["name"].str] ?? c["displayName"].str, rows))
+                }
+            }
+        }
+
+        var page = TeamPage(
             league: league, id: id,
             name: info["displayName"].str,
             abbr: info["abbreviation"].str,
@@ -318,6 +339,8 @@ extension ESPN {
             games: games, roster: players, stats: stats, injuries: injuries, form: form,
             competitions: competitions
         )
+        page.statSections = sections
+        return page
     }
 
     private static func rosterPlayer(_ p: J, group: String?) -> RosterPlayer {

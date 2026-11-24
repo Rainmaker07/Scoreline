@@ -339,6 +339,55 @@ enum BBL {
         return "\(n)\(suffix)"
     }
 
+    // MARK: Stat leaders
+
+    /// Top 10 per category from the season player stats on easycredit-bbl.de/statistiken/spieler.
+    static func leaders() async throws -> [LeaderCategory] {
+        let props = try await page("/statistiken/spieler", maxAge: 3600)
+        guard let widget = props["preloadedWidgetData"].dict.first(where: { $0.key.contains("season-players-statistics") })?.value else {
+            throw FetchError.parse("Stats widget missing")
+        }
+        let rows = widget["data"].array
+        let maxGames = rows.map { $0["gamesPlayed"].int ?? 0 }.max() ?? 0
+        // Averages only count players with at least 40 % of the games.
+        let qualified = rows.filter { Double($0["gamesPlayed"].int ?? 0) >= Double(maxGames) * 0.4 }
+
+        func entry(_ r: J, value: String) -> LeaderEntry {
+            let p = r["seasonPlayer"], t = r["seasonTeam"]
+            return LeaderEntry(
+                name: "\(p["firstName"].str) \(p["lastName"].str)".trimmingCharacters(in: .whitespaces),
+                athleteId: p["playerId"].string ?? p["id"].string,
+                position: p["position"].string.map(positionShort),
+                team: t["name"].string,
+                teamLogo: t["logoUrl"].url,
+                headshot: p["imageUrl"].url,
+                value: value,
+                detail: nil
+            )
+        }
+        func category(_ key: String, _ label: String, pool: [J], format: String = "%.1f", minAttempts: (String, Double)? = nil) -> LeaderCategory? {
+            var list = pool
+            if let m = minAttempts { list = list.filter { ($0[m.0].double ?? 0) >= m.1 } }
+            let top = list.sorted { ($0[key].double ?? 0) > ($1[key].double ?? 0) }.prefix(10)
+            guard !top.isEmpty else { return nil }
+            return LeaderCategory(name: key, label: label,
+                                  leaders: top.map { entry($0, value: String(format: format, $0[key].double ?? 0)) })
+        }
+        let games = Double(maxGames)
+        return [
+            category("pointsPerGame", "Points per game", pool: qualified),
+            category("totalReboundsPerGame", "Rebounds per game", pool: qualified),
+            category("assistsPerGame", "Assists per game", pool: qualified),
+            category("efficiencyPerGame", "Efficiency per game", pool: qualified),
+            category("stealsPerGame", "Steals per game", pool: qualified),
+            category("blocksPerGame", "Blocks per game", pool: qualified),
+            category("threePointShotsMadePerGame", "3-pointers per game", pool: qualified),
+            category("fieldGoalsSuccessPercent", "Field goal %", pool: qualified, minAttempts: ("fieldGoalsAttempted", games * 4)),
+            category("threePointShotSuccessPercent", "3-point %", pool: qualified, minAttempts: ("threePointShotsAttempted", games * 2)),
+            category("freeThrowsSuccessPercent", "Free throw %", pool: qualified, minAttempts: ("freeThrowsAttempted", games * 1.5)),
+        ].compactMap { $0 }
+    }
+
     static func player(_ id: String) async throws -> PlayerPage {
         let p = try await page("/spieler/\(id)", maxAge: 600)
         let pl = p["player"]

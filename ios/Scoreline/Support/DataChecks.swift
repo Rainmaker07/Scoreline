@@ -148,6 +148,12 @@ enum DataChecks {
             try dcExpect(!games.isEmpty, "no games")
             return "\(games.count) games"
         }
+        add("BBL", "Stat leaders") {
+            let cats = try await BBL.leaders()
+            try dcExpect(cats.count >= 6, "only \(cats.count) categories")
+            try dcExpect(cats.allSatisfy { !$0.leaders.isEmpty }, "empty category")
+            return "\(cats.count) categories, top scorer \(cats.first?.leaders.first?.name ?? "?")"
+        }
         add("BBL", "Game detail") {
             guard let g = try await BBL.games().last(where: { $0.state == .post }) else { return "no finished game yet" }
             _ = try await BBL.gameDetail(g.id)

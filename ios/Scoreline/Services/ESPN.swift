@@ -264,7 +264,50 @@ enum ESPN {
 
     // MARK: Leaders
 
-    static func leaders(_ league: League) async throws -> [LeaderCategory] {
+    /// MLB leader categories that are pitching stats (the rest are hitting).
+    static let mlbPitchingCategories: Set<String> = ["ERA", "wins", "strikeouts", "saves", "WHIP", "qualityStarts",
+                                                     "opponentAvg", "holds", "avgGameScore", "inningsPitched"]
+
+    /// MLB fielding leaders (not in the leaders feed): season stats by player, sorted per stat.
+    /// `group`: 7 = American League, 8 = National League, nil = MLB.
+    static func mlbFielding(group: Int?) async throws -> [LeaderCategory] {
+        let cats: [(key: String, label: String, minChances: Double, format: String)] = [
+            ("defWARBR", "Defensive WAR", 0, "%.1f"), ("putouts", "Putouts", 0, "%.0f"), ("assists", "Assists", 0, "%.0f"),
+            ("doublePlays", "Double plays", 0, "%.0f"), ("fieldingPct", "Fielding %", 300, "%.3f"),
+            ("rangeFactor", "Range factor", 300, "%.2f"),
+        ]
+        return try await withThrowingTaskGroup(of: (Int, LeaderCategory?).self) { tg in
+            for (i, c) in cats.enumerated() {
+                tg.addTask {
+                    var q = "category=fielding&seasontype=2&limit=\(c.minChances > 0 ? 150 : 15)&sort=fielding.\(c.key):desc"
+                    if let group { q += "&group=\(group)" }
+                    guard let url = URL(string: "\(common)/baseball/mlb/statistics/byathlete?\(q)") else { return (i, nil) }
+                    let d = try await HTTP.shared.json(url, maxAge: 3600)
+                    let names = d["categories"].array.first { $0["name"].str == "fielding" }?["names"].array.map(\.str) ?? []
+                    guard let col = names.firstIndex(of: c.key) else { return (i, nil) }
+                    let chancesCol = names.firstIndex(of: "totalChances")
+                    let rows: [LeaderEntry] = d["athletes"].array.compactMap { a in
+                        let totals = a["categories"].array.first { $0["name"].str == "fielding" }?["totals"].array.map(\.str) ?? []
+                        guard col < totals.count, let v = Double(totals[col]) else { return nil }
+                        if c.minChances > 0, let cc = chancesCol, cc < totals.count, (Double(totals[cc]) ?? 0) < c.minChances { return nil }
+                        let ath = a["athlete"]
+                        return LeaderEntry(name: ath["displayName"].str, athleteId: ath["id"].string,
+                                           position: ath["position"]["abbreviation"].string,
+                                           team: ath["teamName"].string ?? ath["teamShortName"].string,
+                                           teamLogo: ath["teamLogos"][0]["href"].url,
+                                           headshot: ath["headshot"]["href"].url,
+                                           value: String(format: c.format, v), detail: nil)
+                    }
+                    return (i, rows.isEmpty ? nil : LeaderCategory(name: c.key, label: c.label, leaders: Array(rows.prefix(10))))
+                }
+            }
+            var out: [Int: LeaderCategory] = [:]
+            for try await (i, c) in tg { if let c { out[i] = c } }
+            return out.keys.sorted().compactMap { out[$0] }
+        }
+    }
+
+    static func leaders(_ league: League, group: Int? = nil) async throws -> [LeaderCategory] {
         guard let path = league.espn else { return [] }
         if league.family == .soccer {
             guard let url = URL(string: "\(site)/\(path)/statistics") else { return [] }
@@ -290,7 +333,7 @@ enum ESPN {
                 )
             }
         }
-        guard let url = URL(string: "\(siteV3)/\(path)/leaders") else { return [] }
+        guard let url = URL(string: "\(siteV3)/\(path)/leaders" + (group.map { "?group=\($0)" } ?? "")) else { return [] }
         let d = try await HTTP.shared.json(url, maxAge: 1800)
         return d["leaders"]["categories"].array.compactMap { c in
             let name = c["name"].str

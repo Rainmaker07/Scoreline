@@ -96,15 +96,31 @@ enum TournamentLogos {
         }
         let title = wikiTitle(t.name)
         if let hit = cache[title] { return hit }
-        let url = await Wiki.summary(title)?.image
+        // Only real logos: the article's lead image is often a photo of the venue.
+        var url: URL? = nil
+        if let img = await Wiki.summary(title)?.image, img.lastPathComponent.lowercased().contains("logo") {
+            url = img
+        } else if let html = try? await HTTP.shared.text(CyclingService.wikiURL(title) ?? URL(string: "about:blank")!, maxAge: 86_400 * 7) {
+            url = firstLogo(in: html)
+        }
         cache[title] = url
         return url
+    }
+
+    /// First image in an article whose file name contains "logo" (the infobox logo).
+    static func firstLogo(in html: String) -> URL? {
+        guard let r = html.range(of: #"//upload\.wikimedia\.org/[^"\s]*[Ll]ogo[^"\s]*\.(png|svg\.png|jpg)"#, options: .regularExpression) else { return nil }
+        return URL(string: "https:" + html[r])
     }
 }
 
 /// Tournament logo, loaded from the tournament's Wikipedia article.
 struct TournamentLogo: View {
     let t: TournamentSummary
+    private var initials: String {
+        let words = t.name.split(separator: " ").filter { $0.first?.isUppercase == true }
+        return String(words.prefix(3).compactMap(\.first))
+    }
     var size: CGFloat = 34
     @State private var url: URL?
     @State private var loaded = false
@@ -116,12 +132,16 @@ struct TournamentLogo: View {
                     .padding(3)
                     .background(Color.white, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
             } else {
-                Image(systemName: t.tier == .team ? "flag.2.crossed.fill" : "tennisball.fill")
-                    .font(.system(size: size * 0.5))
-                    .foregroundStyle(Color(hex: t.tier.color))
+                // No logo found: a consistent initials badge in the tier colour.
+                Text(initials)
+                    .font(.system(size: size * 0.3, weight: .heavy))
+                    .foregroundStyle(.white)
+                    .frame(width: size + 6, height: size + 6)
+                    .background(Color(hex: t.tier.color).opacity(0.85), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
             }
         }
         .frame(width: size + 6, height: size + 6)
+        .opacity(loaded ? 1 : 0.4)
         .task(id: t.id) {
             url = await TournamentLogos.logo(t)
             loaded = true
@@ -203,6 +223,111 @@ enum Tennis {
         }.value
         indexCache[year] = (Date(), list)
         return list
+    }
+
+    // MARK: Player season
+
+    struct PlayerMatch: Identifiable {
+        var id: String
+        let date: Date
+        let tournament: String
+        let tier: TennisTier
+        let round: String
+        let opponent: String
+        let won: Bool
+        let score: String
+    }
+
+    struct PlayerSeason {
+        var matches: [PlayerMatch]        // newest first
+        var wins: Int { matches.filter(\.won).count }
+        var losses: Int { matches.filter { !$0.won }.count }
+        /// Furthest round per tournament, newest first ("Australian Open" -> "Won", "Final", "Semifinal"...).
+        var results: [(tournament: String, tier: TennisTier, result: String)]
+        var titles: [String]
+        var finals: Int
+    }
+
+    /// One player's singles matches in a season, from the same ESPN season data as the calendar.
+    static func playerSeason(id: String, year: Int) async throws -> PlayerSeason {
+        guard let url = URL(string: "\(ESPN.site)/tennis/atp/scoreboard?dates=\(year)") else { throw FetchError.parse("Bad URL") }
+        let past = year < Calendar.current.component(.year, from: Date())
+        let data = try await HTTP.shared.data(url, maxAge: past ? 86_400 * 60 : 43_200, permanent: past)
+        return try await Task.detached(priority: .userInitiated) { () throws -> PlayerSeason in
+            let d = try J(data: data)
+            var matches: [PlayerMatch] = []
+            var results: [(String, TennisTier, String, Date)] = []
+            var titles: [String] = []
+            var finals = 0
+            let order = ["Round 1", "Round 2", "Round 3", "Round 4", "Quarterfinal", "Semifinal", "Final"]
+            for e in d["events"].array {
+                guard let singles = e["groupings"].array.first(where: { $0["grouping"]["slug"].str == "mens-singles" }) else { continue }
+                let name = Tennis.cleanName(e["name"].str)
+                let tier = TennisTier.of(name: e["name"].str, major: e["major"].bool == true)
+                var best = -1, bestRound = "", lastDate = Date.distantPast, wonFinal = false
+                for c in singles["competitions"].array where c["status"]["type"]["state"].str == "post" {
+                    let round = c["round"]["displayName"].str
+                    if round.lowercased().contains("qualif") { continue }
+                    let comps = c["competitors"].array
+                    guard let me = comps.first(where: { $0["id"].str == id }),
+                          let them = comps.first(where: { $0["id"].str != id }) else { continue }
+                    let date = ESPNDate.parse(c["date"].string) ?? Date.distantPast
+                    let mine = me["linescores"].array.map { Int($0["value"].double ?? 0) }
+                    let theirs = them["linescores"].array.map { Int($0["value"].double ?? 0) }
+                    let score = zip(mine, theirs).map { "\($0)-\($1)" }.joined(separator: " ")
+                    let won = me["winner"].bool == true
+                    matches.append(PlayerMatch(id: c["id"].str, date: date, tournament: name, tier: tier, round: round,
+                                               opponent: them["athlete"]["displayName"].str, won: won, score: score))
+                    let idx = order.firstIndex(of: round) ?? (round.contains("Round Robin") || round.contains("Group") ? 4 : 0)
+                    if idx >= best { best = idx; bestRound = round }
+                    if round == "Final" { finals += 1; if won { wonFinal = true; titles.append(name) } }
+                    lastDate = max(lastDate, date)
+                }
+                if best >= 0 {
+                    results.append((name, tier, wonFinal ? "Won" : bestRound, lastDate))
+                }
+            }
+            matches.sort { $0.date > $1.date }
+            results.sort { $0.3 > $1.3 }
+            return PlayerSeason(matches: matches, results: results.map { (tournament: $0.0, tier: $0.1, result: $0.2) }, titles: titles, finals: finals)
+        }.value
+    }
+
+    // MARK: Career (Wikipedia infobox)
+
+    /// Singles career rows from the player's Wikipedia infobox: record, titles, rankings,
+    /// and best results at the Grand Slams, ATP Finals and Olympics.
+    static func career(name: String) async -> (career: [InfoRow], majors: [InfoRow]) {
+        var html: String?
+        for title in [name + " (tennis)", name] {
+            if let u = CyclingService.wikiURL(title), let h = try? await HTTP.shared.text(u, maxAge: 86_400 * 2),
+               h.contains("Career record") { html = h; break }
+        }
+        guard let html, let start = html.range(of: "infobox") else { return ([], []) }
+        // The singles block comes before "Doubles"; stop there.
+        let rest = html[start.lowerBound...]
+        let end = rest.range(of: ">Doubles<")?.lowerBound ?? rest.range(of: "</table>")?.lowerBound ?? rest.endIndex
+        let box = String(rest[..<end])
+        var pairs: [(String, String)] = []
+        let re = try? NSRegularExpression(pattern: #"<th[^>]*>(.*?)</th>\s*<td[^>]*>(.*?)</td>"#, options: [.dotMatchesLineSeparators])
+        let ns = box as NSString
+        for m in re?.matches(in: box, range: NSRange(location: 0, length: ns.length)) ?? [] {
+            let k = WikiHTML.clean(ns.substring(with: m.range(at: 1)))
+            let v = WikiHTML.clean(ns.substring(with: m.range(at: 2)))
+            if !k.isEmpty, !v.isEmpty { pairs.append((k, v)) }
+        }
+        func first(_ key: String) -> String? { pairs.first { $0.0.lowercased() == key.lowercased() }?.1 }
+        var career: [InfoRow] = []
+        for (label, key) in [("Career record", "Career record"), ("Career titles", "Career titles"),
+                             ("Highest ranking", "Highest ranking"), ("Current ranking", "Current ranking"),
+                             ("Prize money", "Prize money")] {
+            if let v = first(key) { career.append(InfoRow(label: label, value: v)) }
+        }
+        var majors: [InfoRow] = []
+        for key in ["Australian Open", "French Open", "Wimbledon", "US Open", "Tour Finals", "Olympic Games"] {
+            if let v = first(key) { majors.append(InfoRow(label: key == "Tour Finals" ? "ATP Finals" : key, value: v)) }
+        }
+        return (career, majors)
     }
 
     /// "Brisbane International presented by ANZ" -> "Brisbane International"

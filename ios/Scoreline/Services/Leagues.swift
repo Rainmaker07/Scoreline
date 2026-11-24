@@ -50,7 +50,7 @@ struct League: Identifiable, Hashable {
     var isCup: Bool { id == "dfb" || id == "fac" }
     /// UEFA league-phase competitions.
     var isUEFA: Bool { espn?.hasPrefix("soccer/uefa") == true }
-    var hasStatLeaders: Bool { provider == .espn && family != .rugby }
+    var hasStatLeaders: Bool { (provider == .espn && family != .rugby) || provider == .bbl }
 
     /// Short form for the header pill when the full name doesn't fit.
     var pillShort: String {

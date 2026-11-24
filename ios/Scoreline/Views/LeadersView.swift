@@ -44,9 +44,36 @@ struct LeadersSection: View {
     var refresh = 0
     var limit: Int? = nil
     @State private var category: String?
+    /// MLB filters: league (0 MLB, 1 AL, 2 NL) and type (0 hitting, 1 pitching, 2 fielding).
+    @AppStorage("mlbStatsLeague") private var mlbLeague = 0
+    @AppStorage("mlbStatsType") private var mlbType = 0
+
+    private var isMLB: Bool { league.id == "mlb" }
+    private var mlbGroup: Int? { mlbLeague == 1 ? 7 : mlbLeague == 2 ? 8 : nil }
 
     var body: some View {
-        Loader(id: "\(league.id)-leaders-\(refresh)", load: { try await ESPN.leaders(league) }) { cats in
+        VStack(alignment: .leading, spacing: 12) {
+            if isMLB {
+                VStack(alignment: .leading, spacing: 8) {
+                    TextTabs(items: [0, 1, 2], selection: $mlbLeague) { ["MLB", "AL", "NL"][$0] }
+                    TextTabs(items: [0, 1, 2], selection: $mlbType) { ["Hitting", "Pitching", "Fielding"][$0] }
+                }
+            }
+            leadersBody
+        }
+    }
+
+    private var leadersBody: some View {
+        Loader(id: "\(league.id)-leaders-\(refresh)" + (isMLB ? "-\(mlbLeague)-\(mlbType)" : ""),
+               load: { () async throws -> [LeaderCategory] in
+                   if league.provider == .bbl { return try await BBL.leaders() }
+                   if isMLB {
+                       if mlbType == 2 { return try await ESPN.mlbFielding(group: mlbGroup) }
+                       let all = try await ESPN.leaders(league, group: mlbGroup)
+                       return all.filter { ESPN.mlbPitchingCategories.contains($0.name) == (mlbType == 1) }
+                   }
+                   return try await ESPN.leaders(league)
+               }) { cats in
             if cats.isEmpty {
                 MessageCard(text: "No stat leaders available yet this season.")
             } else {

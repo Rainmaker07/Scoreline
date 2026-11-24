@@ -69,10 +69,26 @@ private struct TournamentList: View {
 struct TierBadge: View {
     let tier: TennisTier
     var body: some View {
-        if tier == .t500, let url = LogoAssets.atp500 {
-            LogoView(url: url, fallback: "500", size: 22)
+        // Official tier logos; the text badge stays until (or if) the logo loads.
+        if let url = logo {
+            CachedImage(url: url) { phase in
+                if case .success(let img) = phase {
+                    img.resizable().scaledToFit().frame(height: 22).frame(maxWidth: 40)
+                } else {
+                    textBadge
+                }
+            }
         } else {
             textBadge
+        }
+    }
+
+    private var logo: URL? {
+        switch tier {
+        case .t500: return LogoAssets.atp500
+        case .t250: return LogoAssets.atp250
+        case .masters: return LogoAssets.masters1000
+        default: return nil
         }
     }
 
@@ -94,7 +110,8 @@ private struct TournamentRow: View {
                 TournamentLogo(t: t, size: 32)
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
-                        Text(t.name).font(.subheadline.weight(.semibold)).lineLimit(1)
+                        Text(t.name).font(.subheadline.weight(.semibold))
+                            .lineLimit(2).minimumScaleFactor(0.9)
                         TierBadge(tier: t.tier)
                     }
                     Text(dates + (t.champion.map { " · 🏆 \($0)" } ?? ""))
@@ -143,12 +160,7 @@ private struct RankingsList: View {
                                 }
                                 .font(.system(size: 10, weight: .bold))
                                 .frame(width: 26, alignment: .leading)
-                                CachedImage(url: r.headshot) { $0.resizable().scaledToFill() } placeholder: {
-                                    Image(systemName: "person.fill").foregroundStyle(Theme.secondary)
-                                }
-                                .frame(width: 30, height: 30)
-                                .background(Theme.card2)
-                                .clipShape(Circle())
+                                TennisPhoto(name: r.name, espn: r.headshot, size: 30)
                                 if let f = r.flag {
                                     CachedImage(url: f) { $0.resizable().scaledToFill() } placeholder: { Theme.card2 }
                                         .frame(width: 20, height: 14).clipShape(RoundedRectangle(cornerRadius: 2))
@@ -481,5 +493,41 @@ struct SlamLogo: View {
                 .frame(width: size, height: size)
                 .background(Color(hex: slam.color), in: Circle())
         }
+    }
+}
+
+/// Tennis player photo: ESPN's headshot, or the player's Wikipedia photo when ESPN has none.
+struct TennisPhoto: View {
+    let name: String
+    let espn: URL?
+    var size: CGFloat = 30
+    @State private var resolved: (name: String, url: URL?)?
+
+    var body: some View {
+        let url = resolved?.name == name ? resolved?.url : nil
+        CachedImage(url: url) { $0.resizable().scaledToFill() } placeholder: {
+            Image(systemName: "person.fill").foregroundStyle(Theme.secondary)
+        }
+        .frame(width: size, height: size)
+        .background(Theme.card2)
+        .clipShape(Circle())
+        .task(id: name) {
+            let u = await TennisPhotos.url(name: name, espn: espn)
+            resolved = (name, u)
+        }
+    }
+}
+
+enum TennisPhotos {
+    /// ESPN first; if that image doesn't exist, the photo from the player's Wikipedia article.
+    static func url(name: String, espn: URL?) async -> URL? {
+        if let espn, await ImageStore.shared.image(espn) != nil { return espn }
+        for title in [name + " (tennis)", name] {
+            if let s = await Wiki.summary(title), let img = s.image,
+               (s.description ?? "").lowercased().contains("tennis") || title.contains("tennis") {
+                return img
+            }
+        }
+        return nil
     }
 }

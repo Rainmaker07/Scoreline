@@ -178,12 +178,15 @@ struct TeamView: View {
                         let games = competition.map { c in t.games.filter { $0.leagueId == c } } ?? t.games
                         switch tab {
                         case 0: TeamGames(games: games, showCompetition: t.competitions.count > 1 && competition == nil)
-                        case 1: TeamRoster(league: league, roster: t.roster)
+                        case 1: TeamRoster(league: league, team: t.name, roster: t.roster)
                         default:
                             if let c = competition.flatMap(League.byId) {
                                 CompetitionRecord(team: t, league: c, games: games)
                             } else {
                                 InfoList(title: "Season", rows: t.stats)
+                                ForEach(Array(t.statSections.enumerated()), id: \.offset) { _, sec in
+                                    InfoList(title: sec.title, rows: sec.rows)
+                                }
                                 if t.competitions.count > 1 {
                                     ForEach(t.competitions) { c in
                                         CompetitionRecord(team: t, league: c, games: t.games.filter { $0.leagueId == c.id })
@@ -268,17 +271,23 @@ private struct CompetitionRecord: View {
 
     var body: some View {
         let done = games.filter { $0.state == .post }
-        var w = 0, d = 0, l = 0, gf = 0, ga = 0
+        var w = 0, d = 0, l = 0, gf = 0, ga = 0, clean = 0, failed = 0
         for g in done {
             let me = g.home.id == team.id ? g.home : g.away
             let them = g.home.id == team.id ? g.away : g.home
             let a = Int(me.score ?? "") ?? 0, b = Int(them.score ?? "") ?? 0
             gf += a; ga += b
+            if b == 0 { clean += 1 }
+            if a == 0 { failed += 1 }
             if a > b { w += 1 } else if a == b { d += 1 } else { l += 1 }
         }
+        let n = max(done.count, 1)
         let rows = [InfoRow(label: "Played", value: "\(done.count)"),
                     InfoRow(label: "Won – drawn – lost", value: "\(w) – \(d) – \(l)"),
                     InfoRow(label: "Goals", value: "\(gf):\(ga)"),
+                    InfoRow(label: "Goals per game", value: String(format: "%.1f : %.1f", Double(gf) / Double(n), Double(ga) / Double(n))),
+                    InfoRow(label: "Clean sheets", value: "\(clean)"),
+                    InfoRow(label: "Failed to score", value: "\(failed)"),
                     InfoRow(label: "Next", value: games.first { $0.state != .post }.map { g in
                         "\(g.home.id == team.id ? "vs" : "@") \(g.home.id == team.id ? g.away.short : g.home.short) · \(Fmt.day(g.date))"
                     } ?? "–")]
@@ -339,40 +348,65 @@ private struct TeamGames: View {
 
 private struct TeamRoster: View {
     let league: League
+    var team = ""
     let roster: [RosterPlayer]
 
     var body: some View {
         let groups = Dictionary(grouping: roster) { $0.group ?? "" }
         let order = roster.reduce(into: [String]()) { acc, p in if !acc.contains(p.group ?? "") { acc.append(p.group ?? "") } }
         VStack(spacing: 14) {
-            if roster.isEmpty { MessageCard(text: "Roster not available.") }
+            if roster.isEmpty {
+                MessageCard(text: isRugby ? "No current squad found on the club’s Wikipedia page." : "Roster not available.")
+            }
             ForEach(order, id: \.self) { g in
                 VStack(alignment: .leading, spacing: 0) {
                     CardTitle(g.isEmpty ? "Roster" : g)
                     ForEach(Array((groups[g] ?? []).enumerated()), id: \.element.id) { i, p in
                         if i > 0 { Divider().overlay(Theme.separator) }
-                        NavigationLink(value: Route.player(leagueId: league.id, playerId: p.id)) {
-                            HStack(spacing: 12) {
-                                CachedImage(url: p.headshot) { $0.resizable().scaledToFill() } placeholder: { Theme.card2 }
-                                    .frame(width: 38, height: 38).clipShape(Circle())
-                                VStack(alignment: .leading, spacing: 1) {
-                                    Text(p.name).font(.subheadline.weight(.semibold)).lineLimit(1)
-                                    Text(p.statLine ?? [p.position, p.age.map { "Age \($0)" }, p.height].compactMap { $0 }.joined(separator: " · "))
-                                        .font(.caption).foregroundStyle(Theme.secondary).lineLimit(1)
-                                }
-                                Spacer()
-                                if let j = p.jersey { Text("#\(j)").font(.subheadline.weight(.bold)).foregroundStyle(Theme.secondary) }
-                                Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(Theme.tertiary)
-                            }
-                            .padding(.vertical, 8)
-                            .contentShape(Rectangle())
+                        if isRugby {
+                            // Squads come from Wikipedia: no player pages for rugby.
+                            row(p, chevron: false)
+                        } else {
+                            NavigationLink(value: Route.player(leagueId: league.id, playerId: p.id)) { row(p, chevron: true) }
+                                .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
                     }
                 }
                 .card(padding: 14)
             }
+            if isRugby && !roster.isEmpty {
+                Text("Squad from Wikipedia (CC BY-SA)").font(.caption2).foregroundStyle(Theme.tertiary)
+            }
         }
+    }
+
+    private var isRugby: Bool { league.family == .rugby }
+
+    private func row(_ p: RosterPlayer, chevron: Bool) -> some View {
+        HStack(spacing: 12) {
+            if isRugby {
+                Text(p.statLine.flatMap { line in RugbySquad.flags.values.first { line.contains($0) } } ?? "🏉")
+                    .font(.system(size: 20))
+                    .frame(width: 38, height: 38)
+                    .background(Theme.card2, in: Circle())
+            } else {
+                // ESPN photo first; football players without one get their FotMob photo.
+                PlayerPhoto(headshot: p.headshot, name: p.name, isFootball: league.family == .soccer,
+                            teamLogo: nil, team: team, size: 38)
+            }
+            VStack(alignment: .leading, spacing: 1) {
+                Text(p.name).font(.subheadline.weight(.semibold)).lineLimit(1)
+                Text(p.statLine ?? [p.position, p.age.map { "Age \($0)" }, p.height].compactMap { $0 }.joined(separator: " · "))
+                    .font(.caption).foregroundStyle(Theme.secondary).lineLimit(1)
+            }
+            Spacer()
+            if let j = p.jersey { Text("#\(j)").font(.subheadline.weight(.bold)).foregroundStyle(Theme.secondary) }
+            if chevron {
+                Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(Theme.tertiary)
+            }
+        }
+        .padding(.vertical, 8)
+        .contentShape(Rectangle())
     }
 }
 
@@ -563,9 +597,21 @@ struct TennisPlayerView: View {
                 VStack(spacing: 14) {
                     DetailHeader(image: info.headshot, isLogo: false, title: info.name, subtitle: info.country, color: "1b4d3e",
                                  trailing: AnyView(FavoriteButton(favorite: Favorite(kind: .tennisPlayer, leagueId: "atp", entityId: id, name: info.name, abbr: "", logo: nil))))
+                        .padding(.top, 6)
                     VStack(spacing: 14) {
+                        InfoList(title: "Ranking", rows: info.ranking)
+                        if let s = info.season {
+                            InfoList(title: "\(info.seasonYear) season", rows: [
+                                InfoRow(label: "Win – loss", value: "\(s.wins) – \(s.losses)"),
+                                InfoRow(label: "Titles", value: s.titles.isEmpty ? "0" : "\(s.titles.count) (\(s.titles.joined(separator: ", ")))"),
+                                InfoRow(label: "Finals", value: "\(s.finals)"),
+                            ])
+                            if !s.results.isEmpty { TennisResultsCard(results: s.results) }
+                            if !s.matches.isEmpty { TennisMatchesCard(matches: Array(s.matches.prefix(10))) }
+                        }
+                        InfoList(title: "Career", rows: info.career)
+                        InfoList(title: "Best results", rows: info.majors)
                         InfoList(title: "Bio", rows: info.bio)
-                        InfoList(title: "Summary", rows: info.summary)
                         if let extract = info.extract {
                             VStack(alignment: .leading, spacing: 8) {
                                 CardTitle("About")
@@ -587,16 +633,82 @@ struct TennisPlayerView: View {
     }
 }
 
+private struct TennisResultsCard: View {
+    let results: [(tournament: String, tier: TennisTier, result: String)]
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            CardTitle("Tournaments")
+            ForEach(Array(results.enumerated()), id: \.offset) { i, r in
+                if i > 0 { Divider().overlay(Theme.separator) }
+                HStack(spacing: 8) {
+                    Text(r.tournament).font(.subheadline.weight(.semibold)).lineLimit(1).minimumScaleFactor(0.85)
+                    TierBadge(tier: r.tier)
+                    Spacer(minLength: 8)
+                    Text(r.result == "Won" ? "🏆 Won" : r.result)
+                        .font(.subheadline.weight(r.result == "Won" ? .bold : .regular))
+                        .foregroundStyle(r.result == "Won" ? Color.yellow : Theme.secondary)
+                }
+                .padding(.vertical, 8)
+            }
+        }
+        .card()
+    }
+}
+
+private struct TennisMatchesCard: View {
+    let matches: [Tennis.PlayerMatch]
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            CardTitle("Recent matches")
+            ForEach(Array(matches.enumerated()), id: \.offset) { i, m in
+                if i > 0 { Divider().overlay(Theme.separator) }
+                HStack(spacing: 10) {
+                    Text(m.won ? "W" : "L")
+                        .font(.caption.weight(.heavy)).foregroundStyle(.white)
+                        .frame(width: 22, height: 22)
+                        .background(m.won ? Color(hex: "30d158") : Color(hex: "ff453a"), in: RoundedRectangle(cornerRadius: 6))
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("vs \(m.opponent)").font(.subheadline.weight(.semibold)).lineLimit(1)
+                        Text("\(m.tournament) · \(m.round) · \(Fmt.date(m.date))")
+                            .font(.caption).foregroundStyle(Theme.secondary).lineLimit(1)
+                    }
+                    Spacer(minLength: 6)
+                    Text(m.score).font(.footnote.weight(.semibold)).monospacedDigit().lineLimit(1).fixedSize()
+                }
+                .padding(.vertical, 8)
+            }
+        }
+        .card()
+    }
+}
+
 struct TennisPlayerInfo {
     let name: String
     let headshot: URL?
     let country: String?
     let bio: [InfoRow]
-    let summary: [InfoRow]
+    let ranking: [InfoRow]
+    let season: Tennis.PlayerSeason?
+    let seasonYear: Int
+    let career: [InfoRow]
+    let majors: [InfoRow]
     let extract: String?
 
     static func load(id: String, name: String) async throws -> TennisPlayerInfo {
-        let a = (try? await HTTP.shared.json(URL(string: "\(ESPN.common)/tennis/atp/athletes/\(id)")!, maxAge: 86_400))?["athlete"] ?? J(nil)
+        let cal = Calendar.current
+        var year = cal.component(.year, from: Date())
+        async let athlete = try? HTTP.shared.json(URL(string: "\(ESPN.common)/tennis/atp/athletes/\(id)")!, maxAge: 86_400)
+        async let rankings = try? Tennis.rankings()
+        async let careerInfo = Tennis.career(name: name)
+        async let wiki = Wiki.summary(name + " (tennis)")
+        var season = try? await Tennis.playerSeason(id: id, year: year)
+        // Early in January the new season has no matches yet: show last season.
+        if (season?.matches.isEmpty ?? true), cal.component(.month, from: Date()) <= 1 {
+            year -= 1
+            season = try? await Tennis.playerSeason(id: id, year: year)
+        }
+
+        let a = (await athlete)?["athlete"] ?? J(nil)
         var bio: [InfoRow] = []
         func add(_ l: String, _ v: String?) { if let v, !v.isEmpty { bio.append(InfoRow(label: l, value: v)) } }
         add("Age", a["age"].int.map(String.init))
@@ -604,14 +716,28 @@ struct TennisPlayerInfo {
         add("Height / Weight", [Units.height(a["displayHeight"].string), Units.weight(a["displayWeight"].string)].compactMap { $0 }.joined(separator: " · "))
         add("Plays", a["hand"]["displayValue"].string)
         add("Turned pro", a["debutYear"].int.map(String.init))
-        let summary = a["statsSummary"]["statistics"].array.map { InfoRow(label: $0["displayName"].str, value: $0["displayValue"].str) }
-        let wiki = await Wiki.summary(name)
+
+        var ranking: [InfoRow] = []
+        if let r = (await rankings)?.first(where: { $0.playerId == id }) {
+            ranking.append(InfoRow(label: "ATP ranking", value: "#\(r.rank)"))
+            ranking.append(InfoRow(label: "Points", value: Int(r.points).formatted(.number.locale(Fmt.locale))))
+            let mv = r.movement
+            ranking.append(InfoRow(label: "Movement", value: mv > 0 ? "▲ \(mv)" : mv < 0 ? "▼ \(-mv)" : "–"))
+        }
+        let (career, majors) = await careerInfo
+        let w = await wiki
+        var extract = w?.extract
+        if !(w?.description ?? "").lowercased().contains("tennis") { extract = await Wiki.summary(name)?.extract }
+        let photo = await TennisPhotos.url(name: name, espn: URL(string: "https://a.espncdn.com/i/headshots/tennis/players/full/\(id).png"))
+        let espnPhoto = URL(string: "https://a.espncdn.com/i/headshots/tennis/players/full/\(id).png")
         return TennisPlayerInfo(
             name: a["displayName"].string ?? name,
-            headshot: URL(string: "https://a.espncdn.com/i/headshots/tennis/players/full/\(id).png"),
+            headshot: photo ?? espnPhoto,
             country: a["citizenship"].string ?? a["flag"]["alt"].string,
-            bio: bio, summary: summary,
-            extract: wiki?.extract
+            bio: bio, ranking: ranking,
+            season: season, seasonYear: year,
+            career: career, majors: majors,
+            extract: extract
         )
     }
 }
