@@ -56,6 +56,10 @@ enum WikiLogo {
         let l = u.lowercased()
         if ["flag", "flagge", "icon", "symbol", "pictogram", "commons-logo", "wiktionary", "edit-", "ambox", "question_book",
             "padlock", "wikidata", "loudspeaker", "disambig"].contains(where: { l.contains($0) }) { return false }
+        if l.contains("current_event") { return false }
+        // Thumbnail size in the path ("/40px-Name.svg.png"): small ones are icons.
+        if let r = u.range(of: #"/\d+px-"#, options: .regularExpression),
+           let n = Int(u[r].filter(\.isNumber)), n < 60 { return false }
         if let w = tag.range(of: #"width="(\d+)""#, options: .regularExpression),
            let n = Int(tag[w].filter(\.isNumber)), n < 50 { return false }
         return true
