@@ -336,7 +336,10 @@ enum ESPN {
         // ESPN's CDN caches server errors per URL (e.g. "?group=8" fails while "?group=8&limit=10"
         // works), so try a few equivalent URLs on both hosts until one answers.
         let g = group.map { "group=\($0)" }
-        let queries: [String] = g.map { [$0, "\($0)&limit=10", "limit=10&\($0)", "\($0)&limit=15", "seasontype=2&\($0)&limit=10"] } ?? ["", "limit=10"]
+        let hour = Int(Date().timeIntervalSince1970 / 3600)
+        let queries: [String] = g.map { [$0, "\($0)&lang=en&region=us", "\($0)&limit=10", "lang=en&\($0)", "\($0)&region=us",
+                                         "\($0)&contentorigin=espn", "\($0)&limit=15", "\($0)&t=\(hour)"] }
+            ?? ["", "lang=en&region=us", "limit=10", "t=\(hour)"]
         var d: J?
         var lastError: Error = FetchError.status(500)
         outer: for host in ["https://site.web.api.espn.com", "https://site.api.espn.com"] {

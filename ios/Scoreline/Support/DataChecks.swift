@@ -299,7 +299,13 @@ enum DataChecks {
                 let logo = await TournamentLogos.logo(t)
                 if logo != nil { found += 1 } else { missing.append(t.name) }
             }
-            return "\(found) of \(found + missing.count) have logos; missing: " + missing.joined(separator: ", ")
+            var traces: [String] = []
+            for t in season where t.tier != .team && missing.contains(t.name) {
+                guard traces.count < 3 else { break }
+                let title = await TournamentLogos.articleTitle(t)
+                traces.append("\(t.name): " + (await WikiLogo.eventLogoTrace(english: title, germanQueries: TournamentLogos.germanQueries(t))))
+            }
+            return "\(found) of \(found + missing.count) have logos || " + traces.joined(separator: " || ") + " || missing: " + missing.joined(separator: ", ")
         }
         add("Diagnostics", "Race logos") {
             let races = try await WorldTour.calendar(dcYear)
@@ -308,7 +314,11 @@ enum DataChecks {
                 let logo = await RaceLogos.logo(r)
                 if logo == nil { missing.append(r.name) }
             }
-            return "\(races.count - missing.count) of \(races.count) have logos; missing: " + missing.joined(separator: ", ")
+            var traces: [String] = []
+            for name in missing.prefix(3) {
+                traces.append("\(name): " + (await WikiLogo.eventLogoTrace(english: name, germanQueries: RaceLogos.germanQueries(name))))
+            }
+            return "\(races.count - missing.count) of \(races.count) have logos || " + traces.joined(separator: " || ") + " || missing: " + missing.joined(separator: ", ")
         }
         add("Diagnostics", "Cycling teams") {
             let tour = TourDef.all[1]
@@ -323,7 +333,7 @@ enum DataChecks {
                 let p = try? await CyclingPeople.team(n)
                 let ok = s != nil && p?.image != nil && p?.roster != nil && p?.wins != nil
                 if !ok { bad += 1 }
-                out.append("\(ok ? "OK" : "MISSING") \(n) -> '\(title)' logo=\(p?.image?.lastPathComponent ?? "-") roster=\(p?.roster != nil) wins=\(p?.wins != nil)")
+                out.append("\(ok ? "OK" : "MISSING") \(n) -> '\(title)' logo=\(p?.image?.lastPathComponent ?? "-") roster=\(p?.roster != nil) wins=\(p?.wins != nil)" + (ok ? "" : " [\(p?.trace ?? "")]"))
             }
             out.insert("\(names.count - bad) of \(names.count) complete", at: 0)
             return out.joined(separator: " || ")
@@ -335,10 +345,16 @@ enum DataChecks {
                 if !r.riders.isEmpty { return "\(y): \(r.riders.count) riders (\(r.riders.first?.name ?? "?")), \(r.teams.count) teams" }
             }
             // Report what the article has, to fix the parser.
-            guard let url = CyclingService.wikiURL("\(dcYear) UCI World Tour") else { return "bad title" }
-            let html = try await HTTP.shared.text(url, maxAge: 3600)
-            let heads = WikiHTML.tables(in: html).prefix(12).map { "[" + ($0.rows.first ?? []).prefix(6).joined(separator: "/") + "]" }
-            throw DataCheckFailure(message: "no ranking table; tables: " + heads.joined(separator: " "))
+            var report: [String] = []
+            for title in CyclingRankings.articles(dcYear) {
+                guard let url = CyclingService.wikiURL(title) else { continue }
+                do {
+                    let html = try await HTTP.shared.text(url, maxAge: 3600)
+                    let heads = WikiHTML.tables(in: html).prefix(12).map { "[" + ($0.rows.first ?? []).prefix(6).joined(separator: "/") + "]" }
+                    report.append("\(title): " + heads.joined(separator: " "))
+                } catch { report.append("\(title): \(error)") }
+            }
+            throw DataCheckFailure(message: "no ranking table || " + report.joined(separator: " || "))
         }
         add("Cycling", "Win leaders") {
             let list = try await CyclingRankings.winLeaders(dcYear)

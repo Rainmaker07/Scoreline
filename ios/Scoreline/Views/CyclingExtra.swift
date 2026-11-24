@@ -433,6 +433,12 @@ enum RaceLogos {
            race.isGrandTour {
             return LogoAssets.grandTour(gt.id)
         }
-        return await WikiLogo.eventLogo(english: race.name, germanQuery: "\(race.name) Radrennen")
+        return await WikiLogo.eventLogo(english: race.name, germanQueries: germanQueries(race.name))
+    }
+
+    /// German article searches: the race name, then the name with "Radrennen".
+    static func germanQueries(_ name: String) -> [String] {
+        let n = name.replacingOccurrences(of: "–", with: "-").replacingOccurrences(of: "/ ", with: "")
+        return [n, "\(n) Radrennen"]
     }
 }

@@ -126,6 +126,8 @@ struct RiderProfile {
     let teams: [(years: String, team: String)]
     let majorWins: [(category: String, items: [String])]
     let extract: String?
+    /// What was looked up (for the data checks).
+    var trace: String = ""
 }
 
 struct CyclingTeamProfile {
@@ -208,7 +210,7 @@ enum CyclingPeople {
     static let teamArticles: [String: String] = [
         "Lidl–Trek": "Lidl–Trek (men's team)", "Lidl-Trek": "Lidl–Trek (men's team)",
         "Movistar Team": "Movistar Team (men's team)", "Movistar": "Movistar Team (men's team)",
-        "Visma–Lease a Bike": "Team Visma–Lease a Bike", "Team Visma–Lease a Bike": "Team Visma–Lease a Bike",
+        "Visma–Lease a Bike": "Visma–Lease a Bike (men's team)", "Team Visma–Lease a Bike": "Visma–Lease a Bike (men's team)",
         "Netcompany INEOS": "Ineos Grenadiers", "INEOS Grenadiers": "Ineos Grenadiers", "Ineos Grenadiers": "Ineos Grenadiers",
         "Decathlon CMA CGM": "Decathlon CMA CGM Team", "Decathlon AG2R La Mondiale": "Decathlon CMA CGM Team",
         "Soudal–Quick-Step": "Soudal–Quick-Step", "Alpecin–Deceuninck": "Alpecin–Premier Tech",
@@ -220,19 +222,42 @@ enum CyclingPeople {
         "Tudor Pro Cycling Team": "Tudor Pro Cycling Team", "Arkéa–B&B Hotels": "Arkéa–B&B Hotels",
     ]
 
+    /// Other article names to try (the team was renamed or the article has a suffix).
+    static let teamAlternatives: [String: [String]] = [
+        "Visma–Lease a Bike": ["Team Visma–Lease a Bike (men's team)", "Team Visma–Lease a Bike"],
+        "Team Visma–Lease a Bike": ["Team Visma–Lease a Bike (men's team)", "Team Visma–Lease a Bike"],
+        "Lidl–Trek": ["Lidl–Trek"], "Lidl-Trek": ["Lidl–Trek"],
+        "Netcompany INEOS": ["Netcompany–Ineos", "Ineos Grenadiers"],
+        "Decathlon CMA CGM": ["Decathlon CMA CGM", "Decathlon–AG2R La Mondiale", "AG2R Citroën Team"],
+        "Movistar Team": ["Movistar Team"], "Movistar": ["Movistar Team"],
+    ]
+
+    private static func isMen(_ s: Wiki.Summary, for name: String) -> Bool {
+        !s.title.lowercased().contains("women") || name.lowercased().contains("women")
+    }
+
     /// The team's Wikipedia article: known mapping, else the name if it is a cycling team,
-    /// else a search for "<name> cycling team".
+    /// else a search for "<name> cycling team". Never the women's team for a men's team name.
     static func teamArticle(_ name: String) async -> (title: String, summary: Wiki.Summary?) {
-        if let t = teamArticles[name], let s = await Wiki.summary(t) { return (s.title, s) }
-        if let s = await Wiki.summary(name), (s.description ?? "").lowercased().contains("cycl") { return (s.title, s) }
-        if let q = "\(name) cycling team".addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-           let url = URL(string: "https://en.wikipedia.org/w/rest.php/v1/search/page?q=\(q)&limit=5"),
+        let candidates = [teamArticles[name]].compactMap { $0 } + (teamAlternatives[name] ?? [])
+        for t in candidates {
+            if let s = await Wiki.summary(t), isMen(s, for: name) { return (s.title, s) }
+        }
+        if let s = await Wiki.summary(name), (s.description ?? "").lowercased().contains("cycl"), isMen(s, for: name) { return (s.title, s) }
+        if let q = "\(name) men's cycling team".addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+           let url = URL(string: "https://en.wikipedia.org/w/rest.php/v1/search/page?q=\(q)&limit=6"),
            let j = try? await HTTP.shared.json(url, maxAge: 86_400 * 7),
-           let page = j["pages"].array.first(where: { ($0["description"].string ?? "").lowercased().contains("cycl") }),
+           let page = j["pages"].array.first(where: {
+               ($0["description"].string ?? "").lowercased().contains("cycl") && !($0["title"].string ?? "").lowercased().contains("women")
+           }),
            let t = page["title"].string {
             return (t, await Wiki.summary(t))
         }
         return (name, nil)
+    }
+
+    private static func plain(_ s: String) -> String {
+        s.replacingOccurrences(of: #"\s*\(.*\)$"#, with: "", options: .regularExpression)
     }
 
     static func team(_ name: String) async throws -> CyclingTeamProfile {
@@ -240,31 +265,46 @@ enum CyclingPeople {
         let (title, summary) = await teamArticle(name)
         var info: [InfoRow] = []
         var logo: URL?
+        var trace: [String] = ["article '\(title)'"]
         if let url = CyclingService.wikiURL(title), let html = try? await HTTP.shared.text(url, maxAge: 86_400 * 3) {
-            // Only real logos (some articles lead with a team photo).
-            logo = WikiLogo.infoboxLogo(in: html).flatMap { u in
-                let n = u.lastPathComponent.lowercased()
-                return n.contains("logo") || n.hasSuffix(".svg.png") ? u : nil
-            }
+            // Only real logos (some articles lead with a team photo or the jersey).
+            logo = WikiLogo.infoboxLogo(in: html, strict: true)
+            trace.append("images " + WikiLogo.infoboxImages(in: html).prefix(4).joined(separator: ","))
             let box = WikiHTML.tables(in: html).first { $0.rows.contains { ["UCI code", "Registered", "Founded"].contains($0.first ?? "") } }
             for r in box?.rows ?? [] where r.count >= 2 && r[0] != r[1] && !r[0].isEmpty {
                 if ["UCI code", "Registered", "Founded", "Discipline", "Status", "Bicycles", "General manager", "Team manager(s)", "Team manager", "Based"].contains(r[0]) {
                     info.append(InfoRow(label: r[0], value: r[1]))
                 }
             }
+        } else {
+            trace.append("article not loaded")
         }
         var roster: WikiTable?
         var wins: WikiTable?
-        // Season articles use the plain team name: "2026 Lidl–Trek season".
-        let seasonName = title.replacingOccurrences(of: #"\s*\(.*\)$"#, with: "", options: .regularExpression)
-        for y in [year, year - 1] {
-            guard roster == nil, let url = CyclingService.wikiURL("\(y) \(seasonName) season"),
-                  let html = try? await HTTP.shared.text(url, maxAge: 86_400) else { continue }
-            let tables = WikiHTML.tables(in: html)
-            roster = tables.first { $0.column("rider") != nil && ($0.column("born") != nil || $0.column("date of birth") != nil) }
-            wins = tables.first { $0.column("race") != nil && $0.column("rider") != nil && $0.column("date") != nil }
+        // Season articles: "2026 Lidl–Trek season", sometimes with the suffix or an older name.
+        var names: [String] = []
+        for n in [plain(title), title, plain(name), name] + (teamAlternatives[name] ?? []).flatMap({ [plain($0), $0] })
+        where !names.contains(n) { names.append(n) }
+        search: for y in [year, year - 1] {
+            for n in names {
+                guard let url = CyclingService.wikiURL("\(y) \(n) season") else { continue }
+                guard let html = try? await HTTP.shared.text(url, maxAge: 86_400) else { continue }
+                let tables = WikiHTML.tables(in: html)
+                let r = tables.first { $0.column("rider") != nil && ($0.column("born") != nil || $0.column("date of birth") != nil) }
+                    ?? tables.first { $0.column("rider") != nil && ($0.column("age") != nil || $0.column("nationality") != nil) }
+                let w = tables.first { $0.column("race") != nil && $0.column("rider") != nil && $0.column("date") != nil }
+                trace.append("'\(y) \(n) season': \(tables.count) tables, roster \(r != nil), wins \(w != nil)")
+                if r == nil && w == nil {
+                    trace.append("heads " + tables.prefix(5).map { ($0.rows.first ?? []).prefix(4).joined(separator: "/") }.joined(separator: " | "))
+                    continue
+                }
+                roster = r
+                wins = w
+                break search
+            }
         }
-        return CyclingTeamProfile(name: seasonName, image: logo, info: info, roster: roster, wins: wins, extract: summary?.extract)
+        return CyclingTeamProfile(name: plain(title), image: logo, info: info, roster: roster, wins: wins,
+                                  extract: summary?.extract, trace: trace.joined(separator: "; "))
     }
 }
 

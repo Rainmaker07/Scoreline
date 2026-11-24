@@ -90,6 +90,16 @@ enum TournamentLogos {
 
     private static var cache: [String: URL?] = [:]
 
+    static func articleTitle(_ t: TournamentSummary) -> String { wikiTitle(t.name) }
+
+    /// German Wikipedia searches: the article names events "ATP <city>".
+    static func germanQueries(_ t: TournamentSummary) -> [String] {
+        let plain = wikiTitle(t.name).replacingOccurrences(of: #"\s*\(.*\)$"#, with: "", options: .regularExpression)
+        let generic: Set<String> = ["open", "international", "championships", "masters", "classic", "grand", "prix", "tennis", "the", "u.s.", "men's", "court", "clay", "grass", "indoors"]
+        let place = plain.split(separator: " ").map(String.init).first { !generic.contains($0.lowercased()) } ?? plain
+        return ["ATP \(place)", "\(plain) Tennisturnier"]
+    }
+
     static func logo(_ t: TournamentSummary) async -> URL? {
         if t.tier == .slam, let slam = Slam.all.first(where: { t.name.lowercased().contains($0.name.split(separator: " ").first!.lowercased()) }) {
             return LogoAssets.slam(slam.id)
@@ -98,7 +108,7 @@ enum TournamentLogos {
         if let hit = cache[title] { return hit }
         // Only infobox logos (the lead image is often a photo of the venue); English article
         // first, then the German one ("ATP Brisbane" etc.), which has logos for most events.
-        let url = await WikiLogo.eventLogo(english: title, germanQuery: "ATP \(t.name) Tennisturnier")
+        let url = await WikiLogo.eventLogo(english: title, germanQueries: germanQueries(t))
         cache[title] = url
         return url
     }

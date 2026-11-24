@@ -43,53 +43,126 @@ enum WikiLogo {
         return URL(string: "https://\(lang).wikipedia.org/api/rest_v1/page/html/\(enc)")
     }
 
-    /// The infobox logo of an article: an image named "...logo...", else the first real
-    /// image inside the first table (the infobox), skipping flags and small icons.
-    static func infoboxLogo(in html: String) -> URL? {
-        let re = try? NSRegularExpression(pattern: #"<img[^>]*?src="(//upload\.wikimedia\.org/[^"]+)"[^>]*>"#)
-        func images(_ s: String) -> [(url: String, tag: String)] {
-            let ns = s as NSString
-            return (re?.matches(in: s, range: NSRange(location: 0, length: ns.length)) ?? []).map {
-                (ns.substring(with: $0.range(at: 1)), ns.substring(with: $0.range))
+    private static let imgRegex = try? NSRegularExpression(pattern: #"<img[^>]*?src="(//upload\.wikimedia\.org/[^"]+)"[^>]*>"#)
+
+    private static func images(_ s: String) -> [(url: String, tag: String)] {
+        let ns = s as NSString
+        return (imgRegex?.matches(in: s, range: NSRange(location: 0, length: ns.length)) ?? []).map {
+            (ns.substring(with: $0.range(at: 1)), ns.substring(with: $0.range))
+        }
+    }
+
+    private static func usable(_ u: String, _ tag: String) -> Bool {
+        let l = u.lowercased()
+        if ["flag", "flagge", "icon", "symbol", "pictogram", "commons-logo", "wiktionary", "edit-", "ambox", "question_book",
+            "padlock", "wikidata", "loudspeaker", "disambig"].contains(where: { l.contains($0) }) { return false }
+        if let w = tag.range(of: #"width="(\d+)""#, options: .regularExpression),
+           let n = Int(tag[w].filter(\.isNumber)), n < 50 { return false }
+        return true
+    }
+
+    /// The HTML of the article's infobox: the first table whose class says infobox,
+    /// else the first table that isn't a maintenance box.
+    static func infobox(in html: String) -> String? {
+        var from = html.startIndex
+        var fallback: String?
+        while let start = html.range(of: "<table", range: from..<html.endIndex) {
+            let tagEnd = html.range(of: ">", range: start.upperBound..<html.endIndex)?.upperBound ?? html.endIndex
+            let tag = html[start.lowerBound..<tagEnd].lowercased()
+            // Find the matching </table> (infoboxes can contain nested tables).
+            var depth = 1
+            var cursor = tagEnd
+            var end = html.endIndex
+            while depth > 0 {
+                guard let close = html.range(of: "</table>", range: cursor..<html.endIndex) else { break }
+                if let open = html.range(of: "<table", range: cursor..<close.lowerBound) {
+                    depth += 1
+                    cursor = open.upperBound
+                } else {
+                    depth -= 1
+                    cursor = close.upperBound
+                    if depth == 0 { end = close.upperBound }
+                }
             }
+            let box = String(html[start.lowerBound..<end])
+            if tag.contains("infobox") || tag.contains("toccolours") { return box }
+            if fallback == nil, !["ambox", "metadata", "box-", "navbox", "sidebar", "mbox"].contains(where: { tag.contains($0) }) {
+                fallback = box
+            }
+            if html.distance(from: html.startIndex, to: start.lowerBound) > 200_000 { break }
+            from = end
         }
-        func usable(_ u: String, _ tag: String) -> Bool {
-            let l = u.lowercased()
-            if ["flag", "flagge", "icon", "symbol", "pictogram", "commons-logo", "wiktionary", "edit-"].contains(where: { l.contains($0) }) { return false }
-            if let w = tag.range(of: #"width="(\d+)""#, options: .regularExpression),
-               let n = Int(tag[w].filter(\.isNumber)), n < 50 { return false }
-            return true
-        }
-        guard let start = html.range(of: "<table") else { return nil }
-        let end = html.range(of: "</table>", range: start.upperBound..<html.endIndex)?.upperBound ?? html.endIndex
-        let box = String(html[start.lowerBound..<end])
-        let inBox = images(box).filter { usable($0.url, $0.tag) }
-        let pick = inBox.first { $0.url.lowercased().contains("logo") } ?? inBox.first
-            ?? images(html).first { $0.url.lowercased().contains("logo") && usable($0.url, $0.tag) }
+        return fallback
+    }
+
+    /// File names of the usable images in the infobox (for diagnostics).
+    static func infoboxImages(in html: String) -> [String] {
+        images(infobox(in: html) ?? "").filter { usable($0.url, $0.tag) }.map { URL(string: "https:" + $0.url)?.lastPathComponent ?? $0.url }
+    }
+
+    /// The infobox logo of an article: an image named "...logo...", else (unless `strict`)
+    /// the first real image inside the infobox, skipping flags and small icons.
+    /// `strict` only accepts images named logo or drawings (SVG), not photos.
+    static func infoboxLogo(in html: String, strict: Bool = false) -> URL? {
+        let inBox = images(infobox(in: html) ?? "").filter { usable($0.url, $0.tag) }
+        func name(_ u: String) -> String { (URL(string: "https:" + u)?.lastPathComponent ?? u).lowercased() }
+        let notLogo = ["map", "karte", "location", "route", "profile", "profil", "jersey", "maillot", "kit_", "trikot", "trophy", "pokal"]
+        let named = inBox.first { name($0.url).contains("logo") }
+        let drawing = inBox.first { img in let n = name(img.url); return n.contains(".svg") && !notLogo.contains { w in n.contains(w) } }
+        let any = inBox.first { img in let n = name(img.url); return !notLogo.contains { w in n.contains(w) } }
+        let pick = named ?? drawing ?? (strict ? nil : any)
+            ?? images(html).first { name($0.url).contains("logo") && usable($0.url, $0.tag) }
         return pick.flatMap { URL(string: "https:" + $0.url) }
     }
 
     /// Logo for an event: English article first, then the German article found by search.
-    static func eventLogo(english: String, germanQuery: String) async -> URL? {
-        let key = english + "|" + germanQuery
+    static func eventLogo(english: String, germanQueries: [String]) async -> URL? {
+        let key = english + "|" + germanQueries.joined(separator: "|")
         if let hit = cache[key] { return hit }
         var url: URL?
         if let u = articleURL(english, lang: "en"), let html = try? await HTTP.shared.text(u, maxAge: 86_400 * 14) {
-            url = infoboxLogo(in: html)
+            url = infoboxLogo(in: html, strict: true)
         }
-        if url == nil,
-           let q = germanQuery.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-           let s = URL(string: "https://de.wikipedia.org/w/rest.php/v1/search/page?q=\(q)&limit=3"),
-           let j = try? await HTTP.shared.json(s, maxAge: 86_400 * 14) {
+        var tried = Set<String>()
+        queries: for query in germanQueries where url == nil {
+            guard let q = query.addingPercentEncoding(withAllowedCharacters: .alphanumerics),
+                  let s = URL(string: "https://de.wikipedia.org/w/rest.php/v1/search/page?q=\(q)&limit=3"),
+                  let j = try? await HTTP.shared.json(s, maxAge: 86_400 * 14) else { continue }
             for page in j["pages"].array {
-                guard let t = page["title"].string, let u = articleURL(t, lang: "de"),
+                guard let t = page["title"].string, tried.insert(t).inserted, let u = articleURL(t, lang: "de"),
                       let html = try? await HTTP.shared.text(u, maxAge: 86_400 * 14),
-                      let logo = infoboxLogo(in: html) else { continue }
+                      let logo = infoboxLogo(in: html, strict: true) else { continue }
                 url = logo
-                break
+                break queries
             }
         }
         cache[key] = url
         return url
+    }
+
+    /// Step-by-step report of the logo lookup (for the data checks).
+    static func eventLogoTrace(english: String, germanQueries: [String]) async -> String {
+        var out: [String] = []
+        if let u = articleURL(english, lang: "en") {
+            do {
+                let html = try await HTTP.shared.text(u, maxAge: 86_400 * 14)
+                out.append("en ok, images [\(infoboxImages(in: html).prefix(4).joined(separator: ","))]")
+            } catch { out.append("en \(error)") }
+        }
+        guard let germanQuery = germanQueries.first, let q = germanQuery.addingPercentEncoding(withAllowedCharacters: .alphanumerics),
+              let s = URL(string: "https://de.wikipedia.org/w/rest.php/v1/search/page?q=\(q)&limit=3") else { return out.joined(separator: "; ") }
+        do {
+            let j = try await HTTP.shared.json(s, maxAge: 86_400 * 14)
+            for page in j["pages"].array {
+                let t = page["title"].str
+                guard let u = articleURL(t, lang: "de") else { continue }
+                do {
+                    let html = try await HTTP.shared.text(u, maxAge: 86_400 * 14)
+                    out.append("de '\(t)' box \(infobox(in: html) != nil), images [\(infoboxImages(in: html).prefix(4).joined(separator: ","))]")
+                } catch { out.append("de '\(t)' \(error)") }
+            }
+            if j["pages"].array.isEmpty { out.append("de search '\(germanQuery)': no results") }
+        } catch { out.append("de search \(error)") }
+        return out.joined(separator: "; ")
     }
 }

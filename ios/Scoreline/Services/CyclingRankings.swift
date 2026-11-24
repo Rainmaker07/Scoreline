@@ -20,18 +20,36 @@ enum CyclingRankings {
         let detail: String   // "2 races · 5 stages"
     }
 
-    /// Individual and team ranking tables of "<year> UCI World Tour" (empty if the article has none).
+    /// Wikipedia articles that may hold the ranking tables, in order.
+    static func articles(_ year: Int) -> [String] {
+        var a = ["\(year) UCI World Tour"]
+        if year >= Calendar.current.component(.year, from: Date()) { a += ["UCI World Ranking", "UCI Men's Road World Rankings"] }
+        return a
+    }
+
+    /// Individual and team ranking tables (empty if no article has them).
     static func rankings(_ year: Int) async throws -> (riders: [Entry], teams: [Entry]) {
-        guard let url = CyclingService.wikiURL("\(year) UCI World Tour") else { return ([], []) }
         let past = year < Calendar.current.component(.year, from: Date())
-        let html = try await HTTP.shared.text(url, maxAge: past ? 86_400 * 60 : 21_600, permanent: past)
-        let tables = WikiHTML.tables(in: html)
-        func points(_ t: WikiTable) -> Int? { t.column("points") ?? t.column("pts") }
-        let riderTable = tables.first { ($0.column("rider") != nil || $0.column("name") != nil) && points($0) != nil }
-        let teamTable = tables.first { $0.column("team") != nil && $0.column("rider") == nil && $0.column("name") == nil && points($0) != nil }
+        var lastError: Error?
+        for title in articles(year) {
+            guard let url = CyclingService.wikiURL(title) else { continue }
+            do {
+                let html = try await HTTP.shared.text(url, maxAge: past ? 86_400 * 60 : 21_600, permanent: past)
+                let r = parse(WikiHTML.tables(in: html))
+                if !r.riders.isEmpty { return r }
+            } catch { lastError = error }
+        }
+        if let lastError, articles(year).count == 1 { throw lastError }
+        return ([], [])
+    }
+
+    private static func parse(_ tables: [WikiTable]) -> (riders: [Entry], teams: [Entry]) {
+        func points(_ t: WikiTable) -> Int? { t.column("points") ?? t.column("pts") ?? t.column("score") }
+        let riderTable = tables.first { ($0.column("rider") != nil || $0.column("name") != nil || $0.column("cyclist") != nil) && points($0) != nil }
+        let teamTable = tables.first { $0.column("team") != nil && $0.column("rider") == nil && $0.column("name") == nil && $0.column("cyclist") == nil && points($0) != nil }
         func parse(_ t: WikiTable?, riders: Bool) -> [Entry] {
             guard let t, let pc = points(t) else { return [] }
-            let nameCol = riders ? (t.column("rider") ?? t.column("name") ?? 1) : (t.column("team") ?? 1)
+            let nameCol = riders ? (t.column("rider") ?? t.column("name") ?? t.column("cyclist") ?? 1) : (t.column("team") ?? 1)
             let teamCol = riders ? t.column("team") : nil
             return t.rows.dropFirst().enumerated().compactMap { i, r in
                 guard r.count > max(nameCol, pc) else { return nil }
