@@ -1,6 +1,6 @@
 # Scoreline for iPhone
 
-**Version 1.5.3 (build 8)**. The installed version is shown under Settings → About.
+**Version 1.6 (build 9)**. The installed version is shown under Settings → About.
 
 A native SwiftUI score tracker styled after Apple Sports.
 
@@ -49,6 +49,7 @@ Every push to `main` builds the app on GitHub, then runs it on an iPhone 13 simu
 | Version | Changes |
 |---|---|
 | 1.5.3 (8) | Polish round: league name as page title, alerts bell in the top bar, one German date style, short club names, collapsible sport groups, lineup pitch readability, NBA Cup knockout only from real Cup games, Grand Tours filter fix; new data: BBL stat leaders, MLB stats by league (MLB/AL/NL) and type (hitting/pitching/fielding), full team stats, tennis player season and career stats, rugby squads, tier and tournament logos, backup player photos, clickable game logs |
+| 1.6 (9) | Match data: game previews (predictor, odds, form, season series, head-to-head, injuries), NBA/MLB play-by-play with win probability chart, football expected goals, shot map, momentum and player ratings (FotMob); cycling Race Calendar and Rankings tabs (UCI World Tour riders and teams, most wins), race logos, clickable jersey winners, fixed cycling team pages; rugby squads; tennis tournament logos from German Wikipedia, ATP tier logos; bigger game leader numbers, BBL league ranks, MLB division leaders and AL/NL titles, reliable AL/NL stat leaders, football competition table with logos and links |
 | 1.5.1 (7) | Fix: the Live Activity extension's bundle ID was ".widgets" instead of the app ID plus ".widgets", so Xcode couldn't register it |
 | 1.5 (6) | Data source checks (Settings → Check data sources, and on every GitHub build), iPhone 13 simulator screenshots on every build, faster loading: image cache, instant tab switching and back navigation, My Teams loads in parallel |
 | 1.4 (5) | Notifications and Live Activities for followed teams and competitions; version number in Settings |
