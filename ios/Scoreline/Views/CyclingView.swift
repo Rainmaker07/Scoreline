@@ -95,12 +95,12 @@ struct EditionBody: View {
                                 Text(j.label).font(.caption2).foregroundStyle(Theme.secondary)
                                     .lineLimit(1).minimumScaleFactor(0.75)
                                 Text(edition.leader(j.key) ?? "—").font(.footnote.weight(.bold))
-                                    .lineLimit(2).minimumScaleFactor(0.85)
+                                    .lineLimit(2).minimumScaleFactor(0.7)
                             }
                             Spacer(minLength: 0)
                         }
                         // Same height for all four cards, whatever the name length.
-                        .frame(maxWidth: .infinity, minHeight: 50, alignment: .leading)
+                        .frame(maxWidth: .infinity, minHeight: 46, maxHeight: 46, alignment: .leading)
                         .padding(12)
                         .background(Theme.card, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                     }
@@ -256,7 +256,7 @@ private struct StageRow: View {
                 .frame(width: 30)
             VStack(alignment: .leading, spacing: 3) {
                 Text(stage.route).font(.subheadline.weight(.semibold))
-                    .lineLimit(1).minimumScaleFactor(0.75)
+                    .lineLimit(1).minimumScaleFactor(0.6)
                 HStack(spacing: 6) {
                     KindBadge(kind: stage.kind)
                     Text([stage.date.map { Fmt.date($0) }, stage.km.map { "\(Int($0.rounded())) km" }]
@@ -271,7 +271,8 @@ private struct StageRow: View {
                     .lineLimit(2).multilineTextAlignment(.trailing).minimumScaleFactor(0.85)
                 if let c = stage.winnerCountry { Text(c).font(.caption2).foregroundStyle(Theme.secondary) }
             }
-            .frame(maxWidth: 110, alignment: .trailing)
+            .frame(maxWidth: 96, alignment: .trailing)
+            .layoutPriority(-1)
             Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(Theme.tertiary)
         }
         .padding(.vertical, 10)

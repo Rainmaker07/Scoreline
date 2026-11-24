@@ -247,7 +247,8 @@ private struct DrawBody: View {
                         Text(Tennis.cleanName(event.name)).font(.title3.weight(.heavy)).lineLimit(2).minimumScaleFactor(0.8)
                         TierBadge(tier: summary.tier)
                     }
-                    if let s = event.start, let e = event.end {
+                    // Main-draw dates from the season index (ESPN's event dates include qualifying).
+                    if let s = Optional(summary.start), let e = Optional(summary.end) {
                         Text("\(Fmt.range(s, e))\(event.venue.map { " · \($0)" } ?? "")")
                             .font(.footnote).foregroundStyle(Theme.secondary)
                     }

@@ -9,12 +9,14 @@ struct TeamColumn: View {
         VStack(spacing: 5) {
             LogoView(url: side.logo, fallback: side.abbr.isEmpty ? side.short : side.abbr, size: logoSize)
             // Short club names ("Leicester", not "Leicester Ti…"); wrap rather than cut off.
-            Text(tableName(side.short))
+            // Two lines only for names with spaces; single words ("Timberwolves") shrink instead of breaking.
+            let name = tableName(side.short)
+            Text(name)
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(.white.opacity(0.85))
                 .multilineTextAlignment(.center)
-                .lineLimit(2)
-                .minimumScaleFactor(0.8)
+                .lineLimit(name.contains(" ") ? 2 : 1)
+                .minimumScaleFactor(0.65)
             if showRecord, let r = side.record, !r.isEmpty {
                 Text(r).font(.caption).foregroundStyle(Theme.secondary)
             }
@@ -28,13 +30,15 @@ struct StatusLine: View {
     let text: String
 
     var body: some View {
+        // "3:24 - 4th" fits the narrow status column as two lines: clock, then period.
         HStack(spacing: 5) {
             if state == .live { LivePulse() }
-            Text(text)
+            Text(text.replacingOccurrences(of: " - ", with: "\n"))
+                .multilineTextAlignment(.center)
         }
         .font(.subheadline.weight(.semibold))
         .foregroundStyle(state == .live ? Theme.live : .white)
-        .lineLimit(1)
+        .lineLimit(2)
         .minimumScaleFactor(0.7)
     }
 }
