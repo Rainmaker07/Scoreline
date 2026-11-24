@@ -252,11 +252,11 @@ struct PlaysSection: View {
                         TextTabs(items: [true, false], selection: $scoringOnly) { $0 ? "Scoring" : "All" }
                             .fixedSize()
                     }
-                    let groups = Array(shown).reduce(into: [(String, [J])]()) { acc, p in
+                    let groups = Array(shown.prefix(250)).reduce(into: [(String, [J])]()) { acc, p in
                         let period = periodLabel(p)
                         if acc.last?.0 == period { acc[acc.count - 1].1.append(p) } else { acc.append((period, [p])) }
                     }
-                    LazyVStack(alignment: .leading, spacing: 0) {
+                    VStack(alignment: .leading, spacing: 0) {
                         ForEach(Array(groups.enumerated()), id: \.offset) { _, g in
                             Text(g.0).font(.caption.weight(.bold)).foregroundStyle(Theme.secondary)
                                 .padding(.top, 12).padding(.bottom, 4)
@@ -312,8 +312,6 @@ private struct WinProbabilityCard: View {
             w["homeWinPercentage"].double.map { (i, $0 * 100) }
         }
         if points.count > 3 {
-            let homeColor = Color.visibleTint(home.color) ?? .blue
-            let awayColor = Color.visibleTint(away.color) ?? .red
             let last = points.last?.1 ?? 50
             VStack(alignment: .leading, spacing: 10) {
                 CardTitle("Win probability")
@@ -328,7 +326,7 @@ private struct WinProbabilityCard: View {
                 Chart {
                     ForEach(points, id: \.0) { p in
                         AreaMark(x: .value("Play", p.0), yStart: .value("Base", 50), yEnd: .value("Home", p.1))
-                            .foregroundStyle(p.1 >= 50 ? homeColor.opacity(0.35) : awayColor.opacity(0.35))
+                            .foregroundStyle(Color.white.opacity(0.12))
                         LineMark(x: .value("Play", p.0), y: .value("Home", p.1))
                             .foregroundStyle(.white)
                             .lineStyle(StrokeStyle(lineWidth: 1.5))
