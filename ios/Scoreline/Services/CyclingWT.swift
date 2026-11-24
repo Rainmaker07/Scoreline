@@ -230,7 +230,8 @@ enum CyclingPeople {
         "Team Visma–Lease a Bike": ["Team Visma–Lease a Bike (men's team)", "Team Visma–Lease a Bike"],
         "Lidl–Trek": ["Lidl–Trek"], "Lidl-Trek": ["Lidl–Trek"],
         "Netcompany INEOS": ["Netcompany–Ineos", "Ineos Grenadiers"],
-        "Decathlon CMA CGM": ["Decathlon CMA CGM", "Decathlon–AG2R La Mondiale", "AG2R Citroën Team"],
+        "Decathlon CMA CGM": ["Decathlon CMA CGM", "Decathlon–AG2R La Mondiale", "Decathlon AG2R La Mondiale", "Decathlon–AG2R La Mondiale Team", "AG2R Citroën Team"],
+        "Pinarello–Q36.5 Pro Cycling Team": ["Q36.5 Pro Cycling Team", "Pinarello–Q36.5"],
         "Movistar Team": ["Movistar Team"], "Movistar": ["Movistar Team"],
     ]
 
@@ -271,6 +272,7 @@ enum CyclingPeople {
         if let url = CyclingService.wikiURL(title), let html = try? await HTTP.shared.text(url, maxAge: 86_400 * 3) {
             // Only real logos (some articles lead with a team photo or the jersey).
             logo = WikiLogo.infoboxLogo(in: html, strict: true)
+                ?? WikiLogo.infoboxLogo(in: html).flatMap { $0.pathExtension.lowercased() == "png" ? $0 : nil }
             trace.append("images " + WikiLogo.infoboxImages(in: html).prefix(4).joined(separator: ",") + " {\(WikiLogo.imageDebug(in: html))}")
             let box = WikiHTML.tables(in: html).first { $0.rows.contains { ["UCI code", "Registered", "Founded"].contains($0.first ?? "") } }
             for r in box?.rows ?? [] where r.count >= 2 && r[0] != r[1] && !r[0].isEmpty {

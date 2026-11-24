@@ -43,7 +43,7 @@ enum WikiLogo {
         return URL(string: "https://\(lang).wikipedia.org/api/rest_v1/page/html/\(enc)")
     }
 
-    private static let imgRegex = try? NSRegularExpression(pattern: #"<img[^>]*?src="(?:https:)?(//upload\.wikimedia\.org/[^"]+)"[^>]*>"#)
+    private static let imgRegex = try? NSRegularExpression(pattern: #"<img[^>]*?src="(?:https:)?(//(?:upload|thumb)\.wikimedia\.org/[^"?]+)[^"]*"[^>]*>"#)
 
     private static func images(_ s: String) -> [(url: String, tag: String)] {
         let ns = s as NSString

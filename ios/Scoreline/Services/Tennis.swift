@@ -115,7 +115,7 @@ enum TournamentLogos {
 
     /// First image in an article whose file name contains "logo" (the infobox logo).
     static func firstLogo(in html: String) -> URL? {
-        guard let r = html.range(of: #"//upload\.wikimedia\.org/[^"\s]*[Ll]ogo[^"\s]*\.(png|svg\.png|jpg)"#, options: .regularExpression) else { return nil }
+        guard let r = html.range(of: #"//(?:upload|thumb)\.wikimedia\.org/[^"\s]*[Ll]ogo[^"\s]*\.(png|svg\.png|jpg)"#, options: .regularExpression) else { return nil }
         return URL(string: "https:" + html[r])
     }
 }
