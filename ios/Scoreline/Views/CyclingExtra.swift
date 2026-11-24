@@ -16,6 +16,9 @@ struct WorldTourList: View {
                         Chip(title: t, selected: filter == i) { filter = i }
                     }
                 }
+            if filter == 1 {
+                GrandToursPanel(year: year, refresh: refresh).id(year)
+            } else {
             Loader(id: "wt-\(year)-\(refresh)", load: { try await WorldTour.calendar(year) }) { races in
                 let list = races.filter { r in
                     switch filter {
@@ -45,6 +48,7 @@ struct WorldTourList: View {
                     }
                 }
             }
+            }
         }
     }
 
@@ -64,10 +68,7 @@ private struct RaceRow: View {
     var body: some View {
         NavigationLink(value: Route.cyclingRace(race)) {
             HStack(spacing: 12) {
-                Image(systemName: race.start == race.end ? "flag.checkered" : "map")
-                    .font(.system(size: 16))
-                    .foregroundStyle(race.isGrandTour ? Color.yellow : Theme.secondary)
-                    .frame(width: 30)
+                RaceLogo(race: race, size: 30)
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
                         Text(race.name).font(.subheadline.weight(.semibold)).lineLimit(1).minimumScaleFactor(0.8)
@@ -104,7 +105,10 @@ struct RaceView: View {
                     Loader(id: "oneday-\(race.id)", load: { try await WorldTour.oneDay(race) }) { r in
                         VStack(alignment: .leading, spacing: 12) {
                             VStack(alignment: .leading, spacing: 4) {
-                                Text(verbatim: "\(r.name) \(r.year)").font(.title2.weight(.heavy))
+                                HStack(spacing: 10) {
+                                    RaceLogo(race: race, size: 44)
+                                    Text(verbatim: "\(r.name) \(r.year)").font(.title2.weight(.heavy))
+                                }
                                 Text([r.dates.map(Fmt.text), r.distance].compactMap { $0 }.joined(separator: " · ")).font(.footnote).foregroundStyle(Theme.secondary)
                                 if let w = r.results.first { Text("Winner: \(w.name)").font(.subheadline.weight(.bold)).padding(.top, 4) }
                             }
@@ -313,5 +317,122 @@ struct CyclingTeamView: View {
         .navigationTitle("Team")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)
+    }
+}
+
+// MARK: - Rankings
+
+/// UCI World Tour ranking (riders, teams) and the season's win leaders.
+struct CyclingRankingsView: View {
+    var refresh = 0
+    @State private var year = Calendar.current.component(.year, from: Date())
+    @AppStorage("cyclingRankingKind") private var kind = 0   // 0 riders, 1 teams, 2 wins
+
+    var body: some View {
+        let thisYear = Calendar.current.component(.year, from: Date())
+        VStack(alignment: .leading, spacing: 12) {
+            ChipRow(items: [thisYear, thisYear - 1, thisYear - 2], selected: year, title: { String($0) }) { year = $0 }
+            TextTabs(items: [0, 1, 2], selection: $kind) { ["Riders", "Teams", "Most wins"][$0] }
+            if kind == 2 {
+                Loader(id: "wins-\(year)-\(refresh)", load: { try await CyclingRankings.winLeaders(year) }) { list in
+                    if list.isEmpty {
+                        MessageCard(text: "No WorldTour results for \(String(year)) yet.")
+                    } else {
+                        VStack(alignment: .leading, spacing: 0) {
+                            CardTitle("Most wins · WorldTour")
+                            ForEach(Array(list.enumerated()), id: \.element.id) { i, w in
+                                if i > 0 { Divider().overlay(Theme.separator) }
+                                NavigationLink(value: Route.rider(name: w.name)) {
+                                    HStack(spacing: 12) {
+                                        Text("\(i + 1)").font(.footnote.weight(.bold)).foregroundStyle(Theme.secondary).frame(width: 22)
+                                        VStack(alignment: .leading, spacing: 1) {
+                                            HStack(spacing: 5) {
+                                                Text(w.name).font(.subheadline.weight(.semibold)).lineLimit(1)
+                                                if let c = w.country { Text(c).font(.caption2).foregroundStyle(Theme.secondary) }
+                                            }
+                                            Text(w.detail).font(.caption).foregroundStyle(Theme.secondary)
+                                        }
+                                        Spacer()
+                                        Text("\(w.wins)").font(.title3.weight(.heavy)).monospacedDigit()
+                                    }
+                                    .padding(.vertical, 8)
+                                    .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .card(padding: 14)
+                    }
+                }
+                Text("Counts one-day wins, overall wins and stage wins in WorldTour races (Wikipedia).")
+                    .font(.caption2).foregroundStyle(Theme.tertiary).padding(.horizontal, 4)
+            } else {
+                Loader(id: "uci-rank-\(year)-\(refresh)", load: { try await CyclingRankings.rankings(year) }) { r in
+                    let list = kind == 0 ? r.riders : r.teams
+                    if list.isEmpty {
+                        MessageCard(text: "The \(String(year)) UCI World Tour ranking isn’t on Wikipedia yet.")
+                    } else {
+                        VStack(alignment: .leading, spacing: 0) {
+                            CardTitle(kind == 0 ? "UCI World Tour · Riders" : "UCI World Tour · Teams")
+                            ForEach(Array(list.enumerated()), id: \.offset) { i, e in
+                                if i > 0 { Divider().overlay(Theme.separator) }
+                                NavigationLink(value: kind == 0 ? Route.rider(name: e.name) : Route.cyclingTeam(e.name)) {
+                                    HStack(spacing: 12) {
+                                        Text("\(e.rank)").font(.footnote.weight(.bold)).foregroundStyle(Theme.secondary).frame(width: 26)
+                                        VStack(alignment: .leading, spacing: 1) {
+                                            HStack(spacing: 5) {
+                                                Text(e.name).font(.subheadline.weight(.semibold)).lineLimit(1)
+                                                if let c = e.country { Text(c).font(.caption2).foregroundStyle(Theme.secondary) }
+                                            }
+                                            if let t = e.team, !t.isEmpty { Text(t).font(.caption).foregroundStyle(Theme.secondary).lineLimit(1) }
+                                        }
+                                        Spacer()
+                                        Text(e.value).font(.subheadline.weight(.bold)).monospacedDigit()
+                                    }
+                                    .padding(.vertical, 8)
+                                    .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .card(padding: 14)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Race logo from Wikipedia (English article, then German) on a light badge;
+/// the flag / map icon when no logo exists.
+struct RaceLogo: View {
+    let race: WTRace
+    var size: CGFloat = 30
+    @State private var url: URL?
+
+    var body: some View {
+        Group {
+            if let url {
+                LogoView(url: url, fallback: race.name, size: size - 4)
+                    .padding(2)
+                    .background(Color.white, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+            } else {
+                Image(systemName: race.isOneDay ? "flag.checkered" : "map")
+                    .font(.system(size: size * 0.53))
+                    .foregroundStyle(race.isGrandTour ? Color.yellow : Theme.secondary)
+            }
+        }
+        .frame(width: size, height: size)
+        .task(id: race.id) { url = await RaceLogos.logo(race) }
+    }
+}
+
+enum RaceLogos {
+    static func logo(_ race: WTRace) async -> URL? {
+        if let gt = TourDef.all.first(where: { race.name.lowercased().contains($0.name.lowercased()) || race.name.lowercased().contains($0.wiki.lowercased()) }),
+           race.isGrandTour {
+            return LogoAssets.grandTour(gt.id)
+        }
+        return await WikiLogo.eventLogo(english: race.name, germanQuery: "\(race.name) Radrennen")
     }
 }

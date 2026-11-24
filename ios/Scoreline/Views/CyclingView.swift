@@ -1,36 +1,46 @@
 import SwiftUI
 
+/// Cycling: "Race Calendar" (all WorldTour races; the Grand Tours filter opens the
+/// Grand Tour view) and "Rankings" (UCI World Tour ranking and win leaders).
 struct CyclingView: View {
     var refresh = 0
-    @State private var year: Int
-    @State private var tour: TourDef
-    @AppStorage("cyclingTab") private var tab = 0
-
-    init(refresh: Int = 0) {
-        self.refresh = refresh
-        // Default: the most recent Grand Tour that has started.
-        let now = Date()
-        let cal = Calendar.current
-        let y = cal.component(.year, from: now)
-        let m = cal.component(.month, from: now)
-        let startMonths = ["giro": 5, "tour": 7, "vuelta": 8]
-        let started = TourDef.all.last { (startMonths[$0.id] ?? 13) <= m }
-        _year = State(initialValue: started == nil ? y - 1 : y)
-        _tour = State(initialValue: started ?? TourDef.all[2])
-    }
+    @AppStorage("cyclingTabV2") private var tab = 0
 
     var body: some View {
-        let thisYear = Calendar.current.component(.year, from: Date())
         VStack(alignment: .leading, spacing: 12) {
             Picker("", selection: $tab) {
-                Text("Grand Tours").tag(0)
-                Text("WorldTour").tag(1)
+                Text("Race Calendar").tag(0)
+                Text("Rankings").tag(1)
             }
             .pickerStyle(.segmented)
             if tab == 1 {
-                WorldTourList(refresh: refresh)
+                CyclingRankingsView(refresh: refresh)
             } else {
-            ChipRow(items: [thisYear, thisYear - 1, thisYear - 2], selected: year, title: { String($0) }) { year = $0 }
+                WorldTourList(refresh: refresh)
+            }
+        }
+    }
+}
+
+/// Giro / Tour / Vuelta cards and the selected edition (stages, jerseys, classifications).
+struct GrandToursPanel: View {
+    let year: Int
+    var refresh = 0
+    @State private var tour: TourDef
+
+    init(year: Int, refresh: Int = 0) {
+        self.year = year
+        self.refresh = refresh
+        // Default: the most recent Grand Tour that has started that year (else the Giro).
+        let cal = Calendar.current
+        let thisYear = cal.component(.year, from: Date())
+        let m = year < thisYear ? 12 : cal.component(.month, from: Date())
+        let startMonths = ["giro": 5, "tour": 7, "vuelta": 8]
+        _tour = State(initialValue: TourDef.all.last { (startMonths[$0.id] ?? 13) <= m } ?? TourDef.all[0])
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 8) {
                 ForEach(TourDef.all) { t in
                     Button { tour = t } label: {
@@ -58,7 +68,6 @@ struct CyclingView: View {
                 .font(.caption2)
                 .foregroundStyle(Theme.tertiary)
                 .padding(.horizontal, 4)
-            }
         }
     }
 }

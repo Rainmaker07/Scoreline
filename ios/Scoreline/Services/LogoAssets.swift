@@ -18,9 +18,9 @@ enum LogoAssets {
     static let tour = u("https://upload.wikimedia.org/wikipedia/commons/thumb/5/50/Tour_de_France_logo_%28black_background%29.svg/330px-Tour_de_France_logo_%28black_background%29.svg.png")
     static let vuelta = u("https://upload.wikimedia.org/wikipedia/commons/thumb/4/4b/La_Vuelta_%28Spain%29_logo.svg/330px-La_Vuelta_%28Spain%29_logo.svg.png")
 
-    /// Loaded from the tier articles' infobox logos at runtime (see WikiLogo).
-    static let atp250 = WikiLogo.url(for: "ATP Tour 250")
-    static let masters1000 = WikiLogo.url(for: "ATP Tour Masters 1000")
+    /// Tier logos from logodix.com/atp (current ATP style, transparent PNGs).
+    static let atp250 = u("https://logodix.com/logo/1903239.png")
+    static let masters1000 = u("https://logodix.com/logo/1903249.png")
     static let atp500 = u("https://upload.wikimedia.org/wikipedia/commons/b/b5/ATP_500_logo_%28as_of_2026%29.png")
 
     static func slam(_ id: String) -> URL? {

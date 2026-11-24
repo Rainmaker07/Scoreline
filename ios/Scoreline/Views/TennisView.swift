@@ -73,7 +73,7 @@ struct TierBadge: View {
         if let url = logo {
             CachedImage(url: url) { phase in
                 if case .success(let img) = phase {
-                    img.resizable().scaledToFit().frame(height: 22).frame(maxWidth: 40)
+                    img.resizable().scaledToFit().frame(height: 22).frame(maxWidth: 48)
                 } else {
                     textBadge
                 }
@@ -513,7 +513,8 @@ struct TennisPhoto: View {
         .background(Theme.card2)
         .clipShape(Circle())
         .task(id: name) {
-            let u = await TennisPhotos.url(name: name, espn: espn)
+            // Lists stay uniform: ESPN headshot or a silhouette, never a Wikipedia action photo.
+            let u = await TennisPhotos.url(name: name, espn: espn, wikipedia: false)
             resolved = (name, u)
         }
     }
@@ -521,8 +522,9 @@ struct TennisPhoto: View {
 
 enum TennisPhotos {
     /// ESPN first; if that image doesn't exist, the photo from the player's Wikipedia article.
-    static func url(name: String, espn: URL?) async -> URL? {
+    static func url(name: String, espn: URL?, wikipedia: Bool = true) async -> URL? {
         if let espn, await ImageStore.shared.image(espn) != nil { return espn }
+        guard wikipedia else { return nil }
         for title in [name + " (tennis)", name] {
             if let s = await Wiki.summary(title), let img = s.image,
                (s.description ?? "").lowercased().contains("tennis") || title.contains("tennis") {

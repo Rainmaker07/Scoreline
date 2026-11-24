@@ -96,13 +96,9 @@ enum TournamentLogos {
         }
         let title = wikiTitle(t.name)
         if let hit = cache[title] { return hit }
-        // Only real logos: the article's lead image is often a photo of the venue.
-        var url: URL? = nil
-        if let img = await Wiki.summary(title)?.image, img.lastPathComponent.lowercased().contains("logo") {
-            url = img
-        } else if let html = try? await HTTP.shared.text(CyclingService.wikiURL(title) ?? URL(string: "about:blank")!, maxAge: 86_400 * 7) {
-            url = firstLogo(in: html)
-        }
+        // Only infobox logos (the lead image is often a photo of the venue); English article
+        // first, then the German one ("ATP Brisbane" etc.), which has logos for most events.
+        let url = await WikiLogo.eventLogo(english: title, germanQuery: "ATP \(t.name) Tennisturnier")
         cache[title] = url
         return url
     }

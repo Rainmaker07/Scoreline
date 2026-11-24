@@ -301,6 +301,15 @@ enum DataChecks {
             }
             return "\(found) of \(found + missing.count) have logos; missing: " + missing.joined(separator: ", ")
         }
+        add("Diagnostics", "Race logos") {
+            let races = try await WorldTour.calendar(dcYear)
+            var missing: [String] = []
+            for r in races {
+                let logo = await RaceLogos.logo(r)
+                if logo == nil { missing.append(r.name) }
+            }
+            return "\(races.count - missing.count) of \(races.count) have logos; missing: " + missing.joined(separator: ", ")
+        }
         add("Diagnostics", "Cycling teams") {
             let tour = TourDef.all[1]
             let y = CyclingService.isFinished(tour, dcYear) ? dcYear : dcYear - 1
@@ -312,6 +321,23 @@ enum DataChecks {
                 out.append("\(t.name) -> '\(s?.title ?? "-")' (\(s?.description ?? "-")) img=\(s?.image?.lastPathComponent ?? "-") roster=\(p?.roster != nil) wins=\(p?.wins != nil)")
             }
             return out.joined(separator: " || ")
+        }
+
+        add("Cycling", "UCI World Tour ranking") {
+            for y in [dcYear, dcYear - 1] {
+                let r = try await CyclingRankings.rankings(y)
+                if !r.riders.isEmpty { return "\(y): \(r.riders.count) riders (\(r.riders.first?.name ?? "?")), \(r.teams.count) teams" }
+            }
+            // Report what the article has, to fix the parser.
+            guard let url = CyclingService.wikiURL("\(dcYear) UCI World Tour") else { return "bad title" }
+            let html = try await HTTP.shared.text(url, maxAge: 3600)
+            let heads = WikiHTML.tables(in: html).prefix(12).map { "[" + ($0.rows.first ?? []).prefix(6).joined(separator: "/") + "]" }
+            throw DataCheckFailure(message: "no ranking table; tables: " + heads.joined(separator: " "))
+        }
+        add("Cycling", "Win leaders") {
+            let list = try await CyclingRankings.winLeaders(dcYear)
+            try dcExpect(!list.isEmpty, "no wins counted")
+            return "\(list.first?.name ?? "?") \(list.first?.wins ?? 0) wins"
         }
 
         // MARK: Photos and logos
