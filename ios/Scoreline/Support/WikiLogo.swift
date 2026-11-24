@@ -43,7 +43,7 @@ enum WikiLogo {
         return URL(string: "https://\(lang).wikipedia.org/api/rest_v1/page/html/\(enc)")
     }
 
-    private static let imgRegex = try? NSRegularExpression(pattern: #"<img[^>]*?src="(//upload\.wikimedia\.org/[^"]+)"[^>]*>"#)
+    private static let imgRegex = try? NSRegularExpression(pattern: #"<img[^>]*?src="(?:https:)?(//upload\.wikimedia\.org/[^"]+)"[^>]*>"#)
 
     private static func images(_ s: String) -> [(url: String, tag: String)] {
         let ns = s as NSString
@@ -95,16 +95,37 @@ enum WikiLogo {
         return fallback
     }
 
+    /// The article's lead section (before the first heading), which holds the infobox.
+    static func lead(in html: String) -> String {
+        let markers = ["data-mw-section-id=\"1\"", "<h2"]
+        let cut = markers.compactMap { html.range(of: $0)?.lowerBound }.min() ?? html.endIndex
+        return String(html[html.startIndex..<cut])
+    }
+
+    /// Images of the infobox, else of the lead section.
+    private static func boxImages(_ html: String) -> [(url: String, tag: String)] {
+        let box = images(infobox(in: html) ?? "").filter { usable($0.url, $0.tag) }
+        return box.isEmpty ? images(lead(in: html)).filter { usable($0.url, $0.tag) } : box
+    }
+
     /// File names of the usable images in the infobox (for diagnostics).
     static func infoboxImages(in html: String) -> [String] {
-        images(infobox(in: html) ?? "").filter { usable($0.url, $0.tag) }.map { URL(string: "https:" + $0.url)?.lastPathComponent ?? $0.url }
+        boxImages(html).map { URL(string: "https:" + $0.url)?.lastPathComponent ?? $0.url }
+    }
+
+    /// Raw facts for diagnostics: image count and the first image tags.
+    static func imageDebug(in html: String) -> String {
+        let all = html.components(separatedBy: "<img").dropFirst()
+        let leadCount = lead(in: html).components(separatedBy: "<img").count - 1
+        let firstTags = all.prefix(2).map { "<img" + String($0.prefix(220)) }
+        return "\(all.count) img (\(leadCount) in lead), box \(infobox(in: html)?.count ?? 0) chars: " + firstTags.joined(separator: " ")
     }
 
     /// The infobox logo of an article: an image named "...logo...", else (unless `strict`)
     /// the first real image inside the infobox, skipping flags and small icons.
     /// `strict` only accepts images named logo or drawings (SVG), not photos.
     static func infoboxLogo(in html: String, strict: Bool = false) -> URL? {
-        let inBox = images(infobox(in: html) ?? "").filter { usable($0.url, $0.tag) }
+        let inBox = boxImages(html)
         func name(_ u: String) -> String { (URL(string: "https:" + u)?.lastPathComponent ?? u).lowercased() }
         let notLogo = ["map", "karte", "location", "route", "profile", "profil", "jersey", "maillot", "kit_", "trikot", "trophy", "pokal"]
         let named = inBox.first { name($0.url).contains("logo") }
@@ -146,7 +167,7 @@ enum WikiLogo {
         if let u = articleURL(english, lang: "en") {
             do {
                 let html = try await HTTP.shared.text(u, maxAge: 86_400 * 14)
-                out.append("en ok, images [\(infoboxImages(in: html).prefix(4).joined(separator: ","))]")
+                out.append("en ok, images [\(infoboxImages(in: html).prefix(4).joined(separator: ","))] {\(imageDebug(in: html))}")
             } catch { out.append("en \(error)") }
         }
         guard let germanQuery = germanQueries.first, let q = germanQuery.addingPercentEncoding(withAllowedCharacters: .alphanumerics),

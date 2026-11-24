@@ -370,10 +370,11 @@ struct CyclingRankingsView: View {
                 Loader(id: "uci-rank-\(year)-\(refresh)", load: { try await CyclingRankings.rankings(year) }) { r in
                     let list = kind == 0 ? r.riders : r.teams
                     if list.isEmpty {
-                        MessageCard(text: "The \(String(year)) UCI World Tour ranking isn’t on Wikipedia yet.")
+                        MessageCard(text: kind == 0 ? "The \(String(year)) UCI ranking isn’t on Wikipedia yet."
+                                    : "Wikipedia has no \(String(year)) team ranking yet.")
                     } else {
                         VStack(alignment: .leading, spacing: 0) {
-                            CardTitle(kind == 0 ? "UCI World Tour · Riders" : "UCI World Tour · Teams")
+                            CardTitle(kind == 0 ? "UCI ranking · Riders" : "UCI ranking · Teams")
                             ForEach(Array(list.enumerated()), id: \.offset) { i, e in
                                 if i > 0 { Divider().overlay(Theme.separator) }
                                 NavigationLink(value: kind == 0 ? Route.rider(name: e.name) : Route.cyclingTeam(e.name)) {
