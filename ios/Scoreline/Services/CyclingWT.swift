@@ -204,12 +204,48 @@ enum CyclingPeople {
         return out.filter { !$0.category.isEmpty }
     }
 
+    /// Team names in results -> Wikipedia article (the plain names are ambiguous or redirects).
+    static let teamArticles: [String: String] = [
+        "Lidl–Trek": "Lidl–Trek (men's team)", "Lidl-Trek": "Lidl–Trek (men's team)",
+        "Movistar Team": "Movistar Team (men's team)", "Movistar": "Movistar Team (men's team)",
+        "Visma–Lease a Bike": "Team Visma–Lease a Bike", "Team Visma–Lease a Bike": "Team Visma–Lease a Bike",
+        "Netcompany INEOS": "Ineos Grenadiers", "INEOS Grenadiers": "Ineos Grenadiers", "Ineos Grenadiers": "Ineos Grenadiers",
+        "Decathlon CMA CGM": "Decathlon CMA CGM Team", "Decathlon AG2R La Mondiale": "Decathlon CMA CGM Team",
+        "Soudal–Quick-Step": "Soudal–Quick-Step", "Alpecin–Deceuninck": "Alpecin–Premier Tech",
+        "Alpecin–Premier Tech": "Alpecin–Premier Tech", "Groupama–FDJ": "Groupama–FDJ United",
+        "Groupama–FDJ United": "Groupama–FDJ United", "Intermarché–Wanty": "Intermarché–Wanty",
+        "XDS Astana Team": "XDS Astana Team", "Astana Qazaqstan Team": "XDS Astana Team",
+        "Team Jayco–AlUla": "Team Jayco–AlUla", "Team Picnic PostNL": "Team Picnic PostNL",
+        "Cofidis": "Cofidis (cycling team)", "Uno-X Mobility": "Uno-X Mobility",
+        "Tudor Pro Cycling Team": "Tudor Pro Cycling Team", "Arkéa–B&B Hotels": "Arkéa–B&B Hotels",
+    ]
+
+    /// The team's Wikipedia article: known mapping, else the name if it is a cycling team,
+    /// else a search for "<name> cycling team".
+    static func teamArticle(_ name: String) async -> (title: String, summary: Wiki.Summary?) {
+        if let t = teamArticles[name], let s = await Wiki.summary(t) { return (s.title, s) }
+        if let s = await Wiki.summary(name), (s.description ?? "").lowercased().contains("cycl") { return (s.title, s) }
+        if let q = "\(name) cycling team".addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+           let url = URL(string: "https://en.wikipedia.org/w/rest.php/v1/search/page?q=\(q)&limit=5"),
+           let j = try? await HTTP.shared.json(url, maxAge: 86_400 * 7),
+           let page = j["pages"].array.first(where: { ($0["description"].string ?? "").lowercased().contains("cycl") }),
+           let t = page["title"].string {
+            return (t, await Wiki.summary(t))
+        }
+        return (name, nil)
+    }
+
     static func team(_ name: String) async throws -> CyclingTeamProfile {
         let year = Calendar.current.component(.year, from: Date())
-        let summary = await Wiki.summary(name)
-        let title = summary?.title ?? name
+        let (title, summary) = await teamArticle(name)
         var info: [InfoRow] = []
+        var logo: URL?
         if let url = CyclingService.wikiURL(title), let html = try? await HTTP.shared.text(url, maxAge: 86_400 * 3) {
+            // Only real logos (some articles lead with a team photo).
+            logo = WikiLogo.infoboxLogo(in: html).flatMap { u in
+                let n = u.lastPathComponent.lowercased()
+                return n.contains("logo") || n.hasSuffix(".svg.png") ? u : nil
+            }
             let box = WikiHTML.tables(in: html).first { $0.rows.contains { ["UCI code", "Registered", "Founded"].contains($0.first ?? "") } }
             for r in box?.rows ?? [] where r.count >= 2 && r[0] != r[1] && !r[0].isEmpty {
                 if ["UCI code", "Registered", "Founded", "Discipline", "Status", "Bicycles", "General manager", "Team manager(s)", "Team manager", "Based"].contains(r[0]) {
@@ -219,14 +255,16 @@ enum CyclingPeople {
         }
         var roster: WikiTable?
         var wins: WikiTable?
+        // Season articles use the plain team name: "2026 Lidl–Trek season".
+        let seasonName = title.replacingOccurrences(of: #"\s*\(.*\)$"#, with: "", options: .regularExpression)
         for y in [year, year - 1] {
-            guard roster == nil, let url = CyclingService.wikiURL("\(y) \(title) season"),
+            guard roster == nil, let url = CyclingService.wikiURL("\(y) \(seasonName) season"),
                   let html = try? await HTTP.shared.text(url, maxAge: 86_400) else { continue }
             let tables = WikiHTML.tables(in: html)
             roster = tables.first { $0.column("rider") != nil && ($0.column("born") != nil || $0.column("date of birth") != nil) }
             wins = tables.first { $0.column("race") != nil && $0.column("rider") != nil && $0.column("date") != nil }
         }
-        return CyclingTeamProfile(name: title, image: summary?.image, info: info, roster: roster, wins: wins, extract: summary?.extract)
+        return CyclingTeamProfile(name: seasonName, image: logo, info: info, roster: roster, wins: wins, extract: summary?.extract)
     }
 }
 

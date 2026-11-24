@@ -333,13 +333,19 @@ enum ESPN {
                 )
             }
         }
-        // site.web.api serves the AL/NL groups reliably (site.api sometimes answers 500); retry once.
-        guard let url = URL(string: "https://site.web.api.espn.com/apis/site/v3/sports/\(path)/leaders" + (group.map { "?group=\($0)" } ?? "")) else { return [] }
-        let d: J
-        do { d = try await HTTP.shared.json(url, maxAge: 1800) } catch {
-            try await Task.sleep(nanoseconds: 800_000_000)
-            d = try await HTTP.shared.json(url, maxAge: 1800)
+        // ESPN's CDN caches server errors per URL (e.g. "?group=8" fails while "?group=8&limit=10"
+        // works), so try a few equivalent URLs on both hosts until one answers.
+        let g = group.map { "group=\($0)" }
+        let queries: [String] = g.map { [$0, "\($0)&limit=10", "limit=10&\($0)", "\($0)&limit=15", "seasontype=2&\($0)&limit=10"] } ?? ["", "limit=10"]
+        var d: J?
+        var lastError: Error = FetchError.status(500)
+        outer: for host in ["https://site.web.api.espn.com", "https://site.api.espn.com"] {
+            for q in queries {
+                guard let url = URL(string: "\(host)/apis/site/v3/sports/\(path)/leaders" + (q.isEmpty ? "" : "?\(q)")) else { continue }
+                do { d = try await HTTP.shared.json(url, maxAge: 1800); break outer } catch { lastError = error }
+            }
         }
+        guard let d else { throw lastError }
         return d["leaders"]["categories"].array.compactMap { c in
             let name = c["name"].str
             if skippedLeaderCategories.contains(name) { return nil }

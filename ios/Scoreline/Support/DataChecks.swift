@@ -315,11 +315,17 @@ enum DataChecks {
             let y = CyclingService.isFinished(tour, dcYear) ? dcYear : dcYear - 1
             let e = try await CyclingService.load(tour, year: y)
             var out: [String] = []
-            for t in e.teams.prefix(24) {
-                let s = await Wiki.summary(t.name)
-                let p = try? await CyclingPeople.team(t.name)
-                out.append("\(t.name) -> '\(s?.title ?? "-")' (\(s?.description ?? "-")) img=\(s?.image?.lastPathComponent ?? "-") roster=\(p?.roster != nil) wins=\(p?.wins != nil)")
+            var names = e.teams.prefix(24).map(\.name)
+            if !names.contains(where: { $0.contains("Movistar") }) { names.append("Movistar Team") }
+            var bad = 0
+            for n in names {
+                let (title, s) = await CyclingPeople.teamArticle(n)
+                let p = try? await CyclingPeople.team(n)
+                let ok = s != nil && p?.image != nil && p?.roster != nil && p?.wins != nil
+                if !ok { bad += 1 }
+                out.append("\(ok ? "OK" : "MISSING") \(n) -> '\(title)' logo=\(p?.image?.lastPathComponent ?? "-") roster=\(p?.roster != nil) wins=\(p?.wins != nil)")
             }
+            out.insert("\(names.count - bad) of \(names.count) complete", at: 0)
             return out.joined(separator: " || ")
         }
 
