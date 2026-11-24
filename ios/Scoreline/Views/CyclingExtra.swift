@@ -22,8 +22,8 @@ struct WorldTourList: View {
                 let list = races.filter { r in
                     switch filter {
                     case 1: return r.isGrandTour
-                    case 2: return !r.isGrandTour && r.start != r.end
-                    case 3: return r.start == r.end
+                    case 2: return !r.isGrandTour && !r.isOneDay
+                    case 3: return r.isOneDay
                     default: return true
                     }
                 }
@@ -79,7 +79,7 @@ private struct RaceRow: View {
                                 .background(Color.yellow.opacity(0.15), in: RoundedRectangle(cornerRadius: 4))
                         }
                     }
-                    Text([race.dates, race.country, race.winner.map { "🏆 \($0)" }].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "))
+                    Text([Fmt.text(race.dates), race.country, race.winner.map { "🏆 \($0)" }].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "))
                         .font(.caption).foregroundStyle(Theme.secondary).lineLimit(1)
                 }
                 Spacer(minLength: 4)
@@ -107,7 +107,7 @@ struct RaceView: View {
                         VStack(alignment: .leading, spacing: 12) {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(verbatim: "\(r.name) \(r.year)").font(.title2.weight(.heavy))
-                                Text([r.dates, r.distance].compactMap { $0 }.joined(separator: " · ")).font(.footnote).foregroundStyle(Theme.secondary)
+                                Text([r.dates.map(Fmt.text), r.distance].compactMap { $0 }.joined(separator: " · ")).font(.footnote).foregroundStyle(Theme.secondary)
                                 if let w = r.results.first { Text("Winner: \(w.name)").font(.subheadline.weight(.bold)).padding(.top, 4) }
                             }
                             .card()

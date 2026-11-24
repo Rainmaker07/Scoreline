@@ -312,7 +312,7 @@ extension ESPN {
             logo: info["logos"][0]["href"].url,
             color: info["color"].string,
             record: recordItem["summary"].string,
-            standing: info["standingSummary"].string,
+            standing: info["standingSummary"].string.map(cleanCompetitionName),
             games: games, roster: players, stats: stats, injuries: injuries, form: form,
             competitions: competitions
         )

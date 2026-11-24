@@ -17,7 +17,7 @@ struct StageDetailView: View {
                     }
                     Text(stage.route).font(.title2.weight(.heavy))
                     HStack(spacing: 14) {
-                        if let d = stage.date { Label(d.formatted(.dateTime.weekday(.wide).month(.wide).day()), systemImage: "calendar") }
+                        if let d = stage.date { Label(Fmt.dayLong(d), systemImage: "calendar") }
                         if let km = stage.km { Label(String(format: "%.1f km", km), systemImage: "ruler") }
                     }
                     .font(.footnote)

@@ -91,7 +91,8 @@ struct League: Identifiable, Hashable {
         League(id: "fac", name: "FA Cup", short: "FA Cup", family: .soccer, provider: .espn, espn: "soccer/eng.fa",
                logo: URL(string: "https://a.espncdn.com/i/leaguelogos/soccer/500-dark/40.png"), glyph: nil, color: "8a1538"),
         League(id: "prem", name: "Premiership Rugby", short: "Premiership", family: .rugby, provider: .espn, espn: "rugby/267979",
-               logo: URL(string: "https://a.espncdn.com/guid/b207ec86-a61d-31fc-8834-4777d50755aa/logos/default-dark.png"),
+               // ESPN's only rugby logo is a near-black wordmark; use the Wikipedia crest instead.
+               logo: WikiLogo.url(for: "Premiership Rugby"),
                glyph: "football.fill", color: "1d3c34"),
         League(id: "atp", name: "ATP World Tour", short: "ATP", family: .tennis, provider: .tennis, espn: "tennis/atp",
                logo: LogoAssets.atp, glyph: "tennis.racket", color: "1b4d3e"),

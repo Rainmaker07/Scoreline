@@ -8,11 +8,13 @@ struct TeamColumn: View {
     var body: some View {
         VStack(spacing: 5) {
             LogoView(url: side.logo, fallback: side.abbr.isEmpty ? side.short : side.abbr, size: logoSize)
-            Text(side.short)
+            // Short club names ("Leicester", not "Leicester Ti…"); wrap rather than cut off.
+            Text(tableName(side.short))
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(.white.opacity(0.85))
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+                .minimumScaleFactor(0.8)
             if showRecord, let r = side.record, !r.isEmpty {
                 Text(r).font(.caption).foregroundStyle(Theme.secondary)
             }
@@ -73,6 +75,8 @@ struct GameRow: View {
     let game: Game
     var big = false
     var favorite = false
+    /// False when a day header above already shows the date.
+    var showDate = true
 
     var body: some View {
         let l = game.ordered.left
@@ -100,7 +104,7 @@ struct GameRow: View {
                         .monospacedDigit()
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
-                    if !Calendar.current.isDateInToday(game.date) {
+                    if showDate && !Calendar.current.isDateInToday(game.date) {
                         Text(Fmt.day(game.date)).font(.caption).foregroundStyle(Theme.secondary)
                             .lineLimit(1).minimumScaleFactor(0.7)
                     }
@@ -165,17 +169,17 @@ struct GameList: View {
             ForEach(Array(sortedGames.enumerated()), id: \.element.id) { i, g in
                 let newDay = i == 0 || !cal.isDate(g.date, inSameDayAs: sortedGames[i - 1].date)
                 if showDayHeaders && newDay {
-                    Text(g.date.formatted(.dateTime.weekday(.wide).month(.wide).day()))
+                    Text(Fmt.dayLong(g.date))
                         .font(.footnote.weight(.bold))
                         .foregroundStyle(Theme.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.top, i == 0 ? 0 : 14)
+                        .padding(.top, 14)
                 } else if i > 0 {
                     Divider().overlay(Theme.separator)
                 }
                 Button { openGame = g } label: {
                     VStack(spacing: 0) {
-                        GameRow(game: g, favorite: isFavorite(g))
+                        GameRow(game: g, favorite: isFavorite(g), showDate: !showDayHeaders)
                         ScorersLine(game: g)
                         if let note = g.note, !note.isEmpty,
                            g.league.family != .soccer || g.state != .post || note.contains("Penalties") {

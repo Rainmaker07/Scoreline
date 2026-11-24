@@ -12,7 +12,12 @@ struct WTRace: Identifiable, Hashable {
     let winner: String?
     let country: String?
 
-    var isGrandTour: Bool { TourDef.all.contains { name.lowercased().contains($0.wiki.lowercased()) || name.lowercased().contains($0.short.lowercased() + " ") } }
+    /// Only the Giro, the Tour de France and the Vuelta (not every race with "Tour" in its name).
+    var isGrandTour: Bool {
+        let n = name.lowercased().folding(options: .diacriticInsensitive, locale: nil)
+        return ["giro d'italia", "giro d’italia", "tour de france", "vuelta a espana", "la vuelta"].contains { n.hasPrefix($0) }
+    }
+    var isOneDay: Bool { start != nil && start == end }
     var isMonument: Bool {
         ["milan–san remo", "milan-san remo", "tour of flanders", "paris–roubaix", "paris-roubaix", "liège–bastogne–liège",
          "liege–bastogne–liege", "il lombardia", "giro di lombardia"].contains { name.lowercased().contains($0) }

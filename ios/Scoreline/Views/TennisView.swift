@@ -115,8 +115,8 @@ private struct TournamentRow: View {
     }
 
     private var dates: String {
-        if t.tier == .team && t.wikiTitle != nil { return t.start.formatted(.dateTime.month(.abbreviated)) }
-        return "\(t.start.formatted(.dateTime.month(.abbreviated).day())) – \(t.end.formatted(.dateTime.month(.abbreviated).day()))"
+        if t.tier == .team && t.wikiTitle != nil { return Fmt.month(t.start) }
+        return Fmt.range(t.start, t.end)
     }
 }
 
@@ -238,7 +238,7 @@ private struct DrawBody: View {
                         TierBadge(tier: summary.tier)
                     }
                     if let s = event.start, let e = event.end {
-                        Text("\(Fmt.day(s)) – \(Fmt.day(e))\(event.venue.map { " · \($0)" } ?? "")")
+                        Text("\(Fmt.range(s, e))\(event.venue.map { " · \($0)" } ?? "")")
                             .font(.footnote).foregroundStyle(Theme.secondary)
                     }
                     if let c = event.champion {

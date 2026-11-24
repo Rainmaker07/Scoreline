@@ -10,7 +10,7 @@ struct NBACupView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 HStack(spacing: 12) {
-                    LogoView(url: LogoAssets.nbaCup, fallback: "Cup", size: 56)
+                    NBACupLogo(height: 48)
                     Text("NBA Cup").font(.title.weight(.heavy))
                 }
                 .padding(.horizontal, 4)
@@ -25,7 +25,7 @@ struct NBACupView: View {
                     if tab == 0 {
                         if data.groups.isEmpty { MessageCard(text: "Groups not available yet.") }
                         ForEach(data.groups) { g in
-                            CupGroupTable(group: g, qualified: data.qualified)
+                            CupGroupTable(group: g, qualified: data.qualified, final: data.groupStageDone)
                             if !g.games.isEmpty {
                                 GameList(games: g.games, openGame: $openGame, showDayHeaders: true)
                                     .padding(.horizontal, 14)
@@ -34,13 +34,33 @@ struct NBACupView: View {
                         }
                     } else {
                         if data.knockout.isEmpty {
-                            MessageCard(text: "The knockout rounds start after the group stage. Quarterfinals, semifinals and the championship game appear here.")
+                            MessageCard(text: "The matchups are set once the group stage is over. Quarterfinals are hosted by the higher seeds; the semifinals and the championship are played in Las Vegas.")
                         }
-                        ForEach(Array(data.knockout.enumerated()), id: \.offset) { _, round in
-                            SectionHeader(title: round.round)
-                            GameList(games: round.games, openGame: $openGame, showDayHeaders: true)
+                        ForEach(["Quarterfinals", "Semifinals", "Championship"], id: \.self) { name in
+                            let count = name == "Quarterfinals" ? 4 : name == "Semifinals" ? 2 : 1
+                            SectionHeader(title: name)
+                            if let round = data.knockout.first(where: { $0.round == name }) {
+                                GameList(games: round.games, openGame: $openGame, showDayHeaders: true)
+                                    .padding(.horizontal, 14)
+                                    .padding(.bottom, 6)
+                                    .background(Theme.card, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+                            } else {
+                                VStack(spacing: 0) {
+                                    ForEach(0..<count, id: \.self) { i in
+                                        if i > 0 { Divider().overlay(Theme.separator) }
+                                        HStack {
+                                            Text("TBD").frame(maxWidth: .infinity)
+                                            Text("vs").font(.caption).foregroundStyle(Theme.tertiary)
+                                            Text("TBD").frame(maxWidth: .infinity)
+                                        }
+                                        .font(.headline)
+                                        .foregroundStyle(Theme.secondary)
+                                        .padding(.vertical, 16)
+                                    }
+                                }
                                 .padding(.horizontal, 14)
                                 .background(Theme.card, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+                            }
                         }
                     }
                 }
@@ -64,6 +84,7 @@ struct NBACupView: View {
 private struct CupGroupTable: View {
     let group: NBACupGroup
     let qualified: Set<String>
+    var final = false
     @EnvironmentObject private var store: AppStore
 
     private let cols: [(String, String, CGFloat)] = [("wins", "W", 26), ("losses", "L", 26), ("pointsFor", "PF", 40),
@@ -82,8 +103,9 @@ private struct CupGroupTable: View {
             .foregroundStyle(Theme.secondary)
             .padding(.bottom, 6)
             ForEach(Array(group.rows.enumerated()), id: \.element.id) { i, r in
-                let zone: Zone? = i == 0 ? Zone(label: "Group Winner", color: Color(hex: "30d158"))
-                    : (qualified.contains(r.id) ? Zone(label: "Wild Card", color: Color(hex: "64d2ff")) : nil)
+                // Provisional labels until every group game has been played.
+                let zone: Zone? = i == 0 ? Zone(label: final ? "Group Winner" : "Leading", color: Color(hex: "30d158"))
+                    : (qualified.contains(r.id) ? Zone(label: final ? "Wild Card" : "Wild Card race", color: Color(hex: "64d2ff")) : nil)
                 if i > 0 { Divider().overlay(Theme.separator) }
                 NavigationLink(value: Route.team(leagueId: "nba", teamId: r.id)) {
                     HStack(spacing: 4) {
@@ -121,5 +143,23 @@ private struct CupGroupTable: View {
             }
         }
         .card()
+    }
+}
+
+/// The NBA Cup wordmark is wide and partly dark navy: show it full width on a light badge.
+struct NBACupLogo: View {
+    var height: CGFloat = 34
+    var body: some View {
+        CachedImage(url: LogoAssets.nbaCup) { phase in
+            if case .success(let img) = phase {
+                img.resizable().scaledToFit()
+            } else {
+                Text("NBA Cup").font(.caption.weight(.heavy)).foregroundStyle(.black)
+            }
+        }
+        .frame(width: height * 2.35, height: height)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 4)
+        .background(Color.white, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 }

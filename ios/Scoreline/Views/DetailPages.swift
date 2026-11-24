@@ -283,7 +283,7 @@ private struct TeamGames: View {
                 NavigationLink(value: Route.game(g)) {
                     VStack(alignment: .leading, spacing: 0) {
                         HStack(spacing: 6) {
-                            Text(g.date.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day()))
+                            Text(Fmt.day(g.date))
                             if showCompetition {
                                 LeagueIcon(league: g.league, size: 12)
                                 Text(g.league.short)
@@ -292,7 +292,7 @@ private struct TeamGames: View {
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(Theme.secondary)
                         .padding(.top, 8)
-                        GameRow(game: g)
+                        GameRow(game: g, showDate: false)
                     }
                 }
                 .buttonStyle(.plain)
@@ -419,7 +419,7 @@ private struct GameLogView: View {
 
     var body: some View {
         let rows = entries.map { e -> (name: String, values: [String]) in
-            let date = e.date.map { $0.formatted(.dateTime.month(.defaultDigits).day()) } ?? ""
+            let date = e.date.map { Fmt.numeric($0) } ?? ""
             return ("\(date) \(e.atVs) \(e.opponent)", [e.result + " " + e.score] + e.stats)
         }
         StatTableView(table: StatTable(title: "Last \(entries.count) games", labels: ["Result"] + labels, rows: rows))

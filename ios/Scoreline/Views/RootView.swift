@@ -157,7 +157,7 @@ struct LeagueIcon: View {
     let league: League
     var size: CGFloat = 24
     var body: some View {
-        if let logo = league.logo, league.id == "atp" || league.id == "cycling" {
+        if let logo = league.logo, ["atp", "cycling", "prem"].contains(league.id) {
             // Dark logos: show them on a light badge so they're visible on the dark UI.
             LogoView(url: logo, fallback: league.short, size: size * 0.8)
                 .frame(width: size, height: size)
@@ -233,6 +233,7 @@ struct LeagueMenu: View {
     }
 
     @AppStorage("expandedSports") private var expandedRaw = ""
+    @AppStorage("collapsedSports") private var collapsedRaw = ""
 
     struct SportGroup: Identifiable {
         let family: Family
@@ -250,8 +251,11 @@ struct LeagueMenu: View {
         return order.map { SportGroup(family: $0, leagues: map[$0] ?? []) }
     }
 
+    /// Open if the user opened it, or if it holds the selected league and the user hasn't closed it.
     private func isExpanded(_ g: SportGroup) -> Bool {
-        expandedRaw.split(separator: ",").contains(Substring(g.family.rawValue)) || g.leagues.contains { $0.id == selected }
+        let f = Substring(g.family.rawValue)
+        if expandedRaw.split(separator: ",").contains(f) { return true }
+        return g.leagues.contains { $0.id == selected } && !collapsedRaw.split(separator: ",").contains(f)
     }
 
     private func sportHeader(_ g: SportGroup) -> some View {
@@ -259,8 +263,14 @@ struct LeagueMenu: View {
         return Button {
             withAnimation(.snappy) {
                 var set = Set(expandedRaw.split(separator: ",").map(String.init))
-                if open { set.remove(g.family.rawValue) } else { set.insert(g.family.rawValue) }
+                var closed = Set(collapsedRaw.split(separator: ",").map(String.init))
+                if open {
+                    set.remove(g.family.rawValue); closed.insert(g.family.rawValue)
+                } else {
+                    set.insert(g.family.rawValue); closed.remove(g.family.rawValue)
+                }
                 expandedRaw = set.sorted().joined(separator: ",")
+                collapsedRaw = closed.sorted().joined(separator: ",")
             }
         } label: {
             HStack(spacing: 11) {

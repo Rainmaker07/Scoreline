@@ -350,7 +350,7 @@ enum BBL {
             let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"; f.locale = Locale(identifier: "en_US_POSIX")
             if let d = f.date(from: b) {
                 let age = Calendar.current.dateComponents([.year], from: d, to: Date()).year ?? 0
-                add("Born", "\(d.formatted(date: .long, time: .omitted)) (age \(age))")
+                add("Born", "\(Fmt.dateYear(d)) (age \(age))")
             }
         }
         if let h = pl["height"].double { add("Height", String(format: "%.2f m", h)) }

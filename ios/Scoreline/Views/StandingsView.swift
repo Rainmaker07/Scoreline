@@ -12,10 +12,11 @@ private struct Col {
 private func columns(_ league: League) -> [Col] {
     switch league.family {
     case .rugby:
-        return [Col(key: "gamesPlayed", label: "P", width: 22), Col(key: "gamesWon", label: "W", width: 22),
-                Col(key: "gamesDrawn", label: "D", width: 22), Col(key: "gamesLost", label: "L", width: 22),
-                Col(key: "pointsDifference", label: "PD", width: 36), Col(key: "bonusPoints", label: "BP", width: 26),
-                Col(key: "points", label: "Pts", strong: true, width: 30)]
+        // Draws are rare in rugby: they live in the expanded row so club names fit.
+        return [Col(key: "gamesPlayed", label: "P", width: 20), Col(key: "gamesWon", label: "W", width: 20),
+                Col(key: "gamesLost", label: "L", width: 20),
+                Col(key: "pointsDifference", label: "PD", width: 34), Col(key: "bonusPoints", label: "BP", width: 24),
+                Col(key: "points", label: "Pts", strong: true, width: 28)]
     case .soccer:
         return [Col(key: "gamesPlayed", label: "P", width: 24), Col(key: "wins", label: "W", width: 24),
                 Col(key: "ties", label: "D", width: 24), Col(key: "losses", label: "L", width: 24),
@@ -41,12 +42,11 @@ private func columns(_ league: League) -> [Col] {
 private func details(_ league: League) -> [Col] {
     switch league.family {
     case .rugby:
-        return [Col(key: "pointsFor", label: "Points for"), Col(key: "pointsAgainst", label: "Points against"),
+        return [Col(key: "gamesDrawn", label: "Drawn"), Col(key: "pointsFor", label: "Points for"), Col(key: "pointsAgainst", label: "Points against"),
                 Col(key: "triesFor", label: "Tries for"), Col(key: "triesAgainst", label: "Tries against"),
                 Col(key: "bonusPointsTry", label: "Try bonus points"), Col(key: "bonusPointsLosing", label: "Losing bonus points")]
     case .soccer:
-        return [Col(key: "pointsFor", label: "Goals for"), Col(key: "pointsAgainst", label: "Goals against"),
-                Col(key: "ppg", label: "Points per game")]
+        return [Col(key: "pointsFor", label: "Goals for"), Col(key: "pointsAgainst", label: "Goals against")]
     case .baseball:
         return [Col(key: "Home", label: "Home"), Col(key: "Road", label: "Away"), Col(key: "pointsFor", label: "Runs scored"),
                 Col(key: "pointsAgainst", label: "Runs allowed"), Col(key: "pointDifferential", label: "Run differential"),

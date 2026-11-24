@@ -93,10 +93,14 @@ struct EditionBody: View {
                             JerseyBadge(color: j.color)
                             VStack(alignment: .leading, spacing: 1) {
                                 Text(j.label).font(.caption2).foregroundStyle(Theme.secondary)
-                                Text(edition.leader(j.key) ?? "—").font(.footnote.weight(.bold)).lineLimit(1).minimumScaleFactor(0.8)
+                                    .lineLimit(1).minimumScaleFactor(0.75)
+                                Text(edition.leader(j.key) ?? "—").font(.footnote.weight(.bold))
+                                    .lineLimit(2).minimumScaleFactor(0.85)
                             }
                             Spacer(minLength: 0)
                         }
+                        // Same height for all four cards, whatever the name length.
+                        .frame(maxWidth: .infinity, minHeight: 50, alignment: .leading)
                         .padding(12)
                         .background(Theme.card, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                     }
@@ -121,7 +125,7 @@ struct EditionBody: View {
         return VStack(alignment: .leading, spacing: 4) {
             TourLogo(tour: def, size: 56)
             Text(verbatim: "\(def.name) \(edition.year)").font(.title2.weight(.heavy))
-            if let d = edition.dates { Text(d).font(.footnote).foregroundStyle(Theme.secondary) }
+            if let d = edition.dates { Text(Fmt.text(d)).font(.footnote).foregroundStyle(Theme.secondary) }
             HStack(spacing: 6) {
                 if status.hasPrefix("Racing") { LivePulse() }
                 Text(status).foregroundStyle(status.hasPrefix("Racing") ? Theme.live : Theme.secondary)
@@ -253,20 +257,23 @@ private struct StageRow: View {
                 .foregroundStyle(Theme.secondary)
                 .frame(width: 30)
             VStack(alignment: .leading, spacing: 3) {
-                Text(stage.route).font(.subheadline.weight(.semibold)).lineLimit(2)
+                Text(stage.route).font(.subheadline.weight(.semibold))
+                    .lineLimit(1).minimumScaleFactor(0.75)
                 HStack(spacing: 6) {
                     KindBadge(kind: stage.kind)
-                    Text([stage.date.map { $0.formatted(.dateTime.month(.abbreviated).day()) }, stage.km.map { "\(Int($0.rounded())) km" }]
+                    Text([stage.date.map { Fmt.date($0) }, stage.km.map { "\(Int($0.rounded())) km" }]
                         .compactMap { $0 }.joined(separator: " · "))
                         .font(.caption).foregroundStyle(Theme.secondary)
+                        .lineLimit(1).fixedSize()
                 }
             }
             Spacer(minLength: 4)
             VStack(alignment: .trailing, spacing: 2) {
-                Text(stage.winner ?? "—").font(.footnote.weight(.semibold)).lineLimit(1)
+                Text(stage.winner ?? "—").font(.footnote.weight(.semibold))
+                    .lineLimit(2).multilineTextAlignment(.trailing).minimumScaleFactor(0.85)
                 if let c = stage.winnerCountry { Text(c).font(.caption2).foregroundStyle(Theme.secondary) }
             }
-            .frame(maxWidth: 130, alignment: .trailing)
+            .frame(maxWidth: 110, alignment: .trailing)
             Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(Theme.tertiary)
         }
         .padding(.vertical, 10)

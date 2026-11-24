@@ -128,6 +128,21 @@ enum ESPN {
     static let siteV3 = "https://site.api.espn.com/apis/site/v3/sports"
     static let core = "https://site.api.espn.com/apis/v2/sports"
 
+    /// ESPN logo, or the club's logo from Wikipedia when ESPN has none (e.g. Bristol Bears).
+    static func teamLogo(_ t: J) -> URL? {
+        if let u = t["logo"].url ?? t["logos"][0]["href"].url { return u }
+        let name = t["displayName"].string ?? t["name"].str
+        guard !name.isEmpty else { return nil }
+        return WikiLogo.url(for: WikiLogo.titles[name] ?? name)
+    }
+
+    /// Records like "11-6"; ESPN puts form strings ("WLLWW") in the same field for rugby.
+    static func realRecord(_ s: String?) -> String? {
+        guard let s, !s.isEmpty else { return nil }
+        if s.range(of: #"^[WLDT]+$"#, options: .regularExpression) != nil { return nil }
+        return s
+    }
+
     static func side(_ c: J) -> Side {
         let t = c["team"]
         return Side(
@@ -135,12 +150,12 @@ enum ESPN {
             name: t["displayName"].string ?? t["name"].str,
             short: t["shortDisplayName"].string ?? t["name"].string ?? t["displayName"].str,
             abbr: t["abbreviation"].str,
-            logo: t["logo"].url ?? t["logos"][0]["href"].url,
+            logo: teamLogo(t),
             color: t["color"].string,
             altColor: t["alternateColor"].string,
             score: c["score"].string,
             winner: c["winner"].bool,
-            record: c["records"][0]["summary"].string ?? c["record"][0]["displayValue"].string ?? c["record"][0]["summary"].string,
+            record: realRecord(c["records"][0]["summary"].string ?? c["record"][0]["displayValue"].string ?? c["record"][0]["summary"].string),
             linescores: c["linescores"].array.map { $0["displayValue"].string ?? $0["value"].double.map { String(Int($0)) } ?? "" },
             isHome: c["homeAway"].str == "home"
         )
@@ -219,7 +234,7 @@ enum ESPN {
                     name: t["displayName"].str,
                     short: t["shortDisplayName"].string ?? t["name"].str,
                     abbr: t["abbreviation"].str,
-                    logo: t["logos"][0]["href"].url,
+                    logo: teamLogo(t),
                     stats: stats,
                     noteColor: en["note"]["color"].string,
                     noteText: en["note"]["description"].string

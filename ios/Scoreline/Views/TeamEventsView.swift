@@ -94,7 +94,7 @@ private struct TieRow: View {
                         Text("vs").font(.subheadline.weight(.semibold)).foregroundStyle(Theme.secondary)
                         nation(tie.teamB, alignment: .trailing)
                     }
-                    Text(tie.venue).font(.caption).foregroundStyle(Theme.secondary).lineLimit(1).minimumScaleFactor(0.8)
+                    Text(Fmt.venueAndDate(tie.venue)).font(.caption).foregroundStyle(Theme.secondary).lineLimit(1).minimumScaleFactor(0.8)
                 }
                 .padding(.vertical, 8)
                 .contentShape(Rectangle())

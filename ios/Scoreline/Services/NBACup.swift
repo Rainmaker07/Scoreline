@@ -17,6 +17,8 @@ struct NBACupData {
     var groups: [NBACupGroup]
     var knockout: [(round: String, games: [Game])]
     let qualified: Set<String>
+    /// True once every group game is played; until then winners and wild cards are provisional.
+    var groupStageDone = false
 }
 
 enum NBACup {
@@ -120,17 +122,26 @@ enum NBACup {
             if let wc = seconds.sorted(by: rankOrder).first { qualified.insert(wc.id) }
         }
 
-        // Knockout: games after the group stage between qualified teams.
-        let ko = all.filter { !usedGames.contains($0.id) && $0.date > lastGroupGame.addingTimeInterval(86_400)
-            && qualified.contains($0.home.id) && qualified.contains($0.away.id) }
-            .sorted { $0.date < $1.date }
-        var knockout: [(round: String, games: [Game])] = []
-        if !ko.isEmpty {
-            knockout.append((round: "Quarterfinals", games: Array(ko.prefix(4))))
-            if ko.count > 4 { knockout.append((round: "Semifinals", games: Array(ko.dropFirst(4).prefix(2)))) }
-            if ko.count > 6 { knockout.append((round: "Championship", games: Array(ko.dropFirst(6).prefix(1)))) }
+        // Knockout: only games ESPN labels as Cup knockout games ("NBA Cup - Quarterfinals",
+        // "NBA Cup - Semifinals", "NBA Cup Championship"). Regular-season games between the
+        // same teams are not knockout games.
+        func round(_ g: Game) -> String? {
+            let n = (g.note ?? "").lowercased()
+            guard n.contains("nba cup") else { return nil }
+            if n.contains("quarterfinal") { return "Quarterfinals" }
+            if n.contains("semifinal") { return "Semifinals" }
+            if n.contains("championship") || n.contains("final") { return "Championship" }
+            return nil
         }
-        return NBACupData(year: year, groups: groups, knockout: knockout, qualified: qualified)
+        var knockout: [(round: String, games: [Game])] = []
+        for name in ["Quarterfinals", "Semifinals", "Championship"] {
+            let games = all.filter { round($0) == name }.sorted { $0.date < $1.date }
+            if !games.isEmpty { knockout.append((round: name, games: games)) }
+        }
+        // Each group of five plays ten games.
+        let done = !groups.isEmpty && groups.allSatisfy { $0.games.filter { $0.state == .post }.count >= 10 }
+        _ = lastGroupGame
+        return NBACupData(year: year, groups: groups, knockout: knockout, qualified: qualified, groupStageDone: done)
     }
 
     private static func rankOrder(_ a: StandingRow, _ b: StandingRow) -> Bool {

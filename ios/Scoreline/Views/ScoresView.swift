@@ -46,7 +46,7 @@ struct LeaguePage: View {
             if league.id == "nba" {
                 NavigationLink(value: Route.nbaCup) {
                     HStack(spacing: 12) {
-                        LogoView(url: LogoAssets.nbaCup, fallback: "Cup", size: 40)
+                        NBACupLogo(height: 34)
                         Text("NBA Cup").font(.headline)
                         Spacer()
                         Image(systemName: "chevron.right").foregroundStyle(Theme.secondary)
@@ -97,7 +97,7 @@ struct CupRoundsSection: View {
                 let round = rounds.first { $0.label == selected } ?? current
                 VStack(alignment: .leading, spacing: 12) {
                     ChipRow(items: rounds.map(\.label), selected: round.label, title: { $0 }) { selected = $0 }
-                    Text(round.detail).font(.footnote).foregroundStyle(Theme.secondary).padding(.horizontal, 4)
+                    Text(Fmt.text(round.detail)).font(.footnote).foregroundStyle(Theme.secondary).padding(.horizontal, 4)
                     Loader(id: "\(league.id)-round-\(round.label)-\(refresh)",
                            poll: { (games: [Game]) in games.contains(where: { $0.state == .live }) ? 20 : nil },
                            load: { try await ESPN.cupGames(league, round: round) }) { games in

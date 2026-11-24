@@ -172,11 +172,16 @@ enum Tennis {
         let list = try await Task.detached(priority: .userInitiated) { () throws -> [TournamentSummary] in
             let d = try J(data: data)
             var out: [TournamentSummary] = d["events"].array.compactMap { e in
-                guard let start = ESPNDate.parse(e["date"].string) else { return nil }
-                let end = ESPNDate.parse(e["endDate"].string) ?? start
+                guard let eventStart = ESPNDate.parse(e["date"].string) else { return nil }
                 let name = e["name"].str
                 // Champion = winner of the men's singles final.
                 let singles = e["groupings"].array.first { $0["grouping"]["slug"].str == "mens-singles" }
+                // ESPN's event dates include qualifying: use the first and last main-draw singles match.
+                let matchDays = (singles?["competitions"].array ?? [])
+                    .filter { !$0["round"]["displayName"].str.lowercased().contains("qualif") }
+                    .compactMap { ESPNDate.parse($0["date"].string) }
+                let start = matchDays.min().map { Calendar.current.startOfDay(for: $0) } ?? eventStart
+                let end = matchDays.max() ?? ESPNDate.parse(e["endDate"].string) ?? eventStart
                 let final = singles?["competitions"].array.first { $0["round"]["displayName"].str == "Final" && $0["status"]["type"]["state"].str == "post" }
                 let champ = final?["competitors"].array.first { $0["winner"].bool == true }?["athlete"]["displayName"].string
                 if singles == nil && !name.lowercased().contains("next gen") && e["groupings"].array.isEmpty { return nil }

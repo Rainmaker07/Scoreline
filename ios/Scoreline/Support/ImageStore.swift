@@ -92,6 +92,11 @@ final class ImageStore: @unchecked Sendable {
     }
 
     private func fetch(_ url: URL) async -> UIImage? {
+        if url.scheme == WikiLogo.scheme {
+            guard let real = await WikiLogo.resolve(url), let img = await image(real) else { markMissing(url); return nil }
+            store(img, url)
+            return img
+        }
         let f = file(url)
         let attrs = try? FileManager.default.attributesOfItem(atPath: f.path)
         let age = (attrs?[.modificationDate] as? Date).map { Date().timeIntervalSince($0) }

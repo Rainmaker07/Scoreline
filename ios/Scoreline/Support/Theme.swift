@@ -235,8 +235,112 @@ struct MessageCard: View {
     }
 }
 
+/// One date style for the whole app (German): "Di., 24. Nov.", "00:30", "22. Aug. – 13. Sep.".
 enum Fmt {
-    static func time(_ d: Date) -> String { d.formatted(date: .omitted, time: .shortened) }
-    static func day(_ d: Date) -> String { d.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day()) }
-    static func dayOnly(_ d: Date) -> String { d.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day()) }
+    static let locale = Locale(identifier: "de_DE")
+
+    private static func formatter(_ pattern: String) -> DateFormatter {
+        let f = DateFormatter()
+        f.locale = locale
+        f.setLocalizedDateFormatFromTemplate(pattern)
+        return f
+    }
+    private static let timeF: DateFormatter = { let f = DateFormatter(); f.locale = locale; f.dateFormat = "HH:mm"; return f }()
+    private static let dayF = formatter("EEEdMMM")          // Di., 24. Nov.
+    private static let dayLongF = formatter("EEEEdMMMM")    // Sonntag, 29. November
+    private static let dateF = formatter("dMMM")            // 24. Nov.
+    private static let dateYearF = formatter("dMMMyyyy")    // 20. Apr. 1997
+    private static let numericF: DateFormatter = { let f = DateFormatter(); f.locale = locale; f.dateFormat = "d.M."; return f }()
+    private static let monthF = formatter("MMM")            // Nov.
+
+    /// 00:30, 21:00
+    static func time(_ d: Date) -> String { timeF.string(from: d) }
+    /// Di., 24. Nov.
+    static func day(_ d: Date) -> String { dayF.string(from: d) }
+    static func dayOnly(_ d: Date) -> String { day(d) }
+    /// Sonntag, 29. November
+    static func dayLong(_ d: Date) -> String { dayLongF.string(from: d) }
+    /// 24. Nov.
+    static func date(_ d: Date) -> String { dateF.string(from: d) }
+    /// 20. Apr. 1997
+    static func dateYear(_ d: Date) -> String { dateYearF.string(from: d) }
+    /// 23.11.
+    static func numeric(_ d: Date) -> String { numericF.string(from: d) }
+    /// Nov.
+    static func month(_ d: Date) -> String { monthF.string(from: d) }
+
+    /// 22. Aug. – 13. Sep. / 20.–25. Jan. / 5. Apr.
+    static func range(_ a: Date, _ b: Date) -> String {
+        let cal = Calendar.current
+        if cal.isDate(a, inSameDayAs: b) { return date(a) }
+        if cal.isDate(a, equalTo: b, toGranularity: .month) {
+            return "\(cal.component(.day, from: a)).–\(date(b))"
+        }
+        return "\(date(a)) – \(date(b))"
+    }
+
+    private static let germanMonths = ["Jan.", "Feb.", "März", "Apr.", "Mai", "Juni", "Juli", "Aug.", "Sep.", "Okt.", "Nov.", "Dez."]
+    private static let englishMonths = ["january", "february", "march", "april", "may", "june", "july", "august",
+                                        "september", "october", "november", "december"]
+    private static func monthIndex(_ name: String) -> Int? {
+        let n = name.lowercased()
+        return englishMonths.firstIndex { $0 == n || ($0.hasPrefix(n) && n.count >= 3) }
+    }
+
+    /// Rewrites English dates in text from Wikipedia or ESPN into the app's style:
+    /// "22 August – 13 September" → "22. Aug. – 13. Sep.", "20–25 January" → "20.–25. Jan.",
+    /// "25 November 2026" → "25. Nov. 2026", "Dec 1-2" → "1.–2. Dez.", "Aug 21-Sep 2" → "21. Aug. – 2. Sep.".
+    static func text(_ s: String) -> String {
+        var out = s
+        let monthPat = "(January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\\.?"
+        // "Aug 21-Sep 2" / "Dec 1-2" / "Oct 27"
+        if let re = try? NSRegularExpression(pattern: "\\b\(monthPat) (\\d{1,2})(?:\\s*[-–]\\s*(?:\(monthPat) )?(\\d{1,2}))?\\b") {
+            out = replace(re, in: out) { g in
+                guard let m1 = monthIndex(g[1] ?? ""), let d1 = g[2] else { return nil }
+                if let d2 = g[4] {
+                    if let m2name = g[3], let m2 = monthIndex(m2name), m2 != m1 {
+                        return "\(d1). \(germanMonths[m1]) – \(d2). \(germanMonths[m2])"
+                    }
+                    return "\(d1).–\(d2). \(germanMonths[m1])"
+                }
+                return "\(d1). \(germanMonths[m1])"
+            }
+        }
+        // "20–25 January 2026" / "22 August" / "28 April – 3 May"
+        if let re = try? NSRegularExpression(pattern: "\\b(\\d{1,2})(?:\\s*[–-]\\s*(\\d{1,2}))? \(monthPat)(?: (\\d{4}))?\\b") {
+            out = replace(re, in: out) { g in
+                guard let d1 = g[1], let m = monthIndex(g[3] ?? "") else { return nil }
+                let year = g[4].map { " \($0)" } ?? ""
+                if let d2 = g[2] { return "\(d1).–\(d2). \(germanMonths[m])\(year)" }
+                return "\(d1). \(germanMonths[m])\(year)"
+            }
+        }
+        return out
+    }
+
+    private static func replace(_ re: NSRegularExpression, in s: String, _ f: ([String?]) -> String?) -> String {
+        let ns = s as NSString
+        var result = ""
+        var last = 0
+        for m in re.matches(in: s, range: NSRange(location: 0, length: ns.length)) {
+            let groups: [String?] = (0..<m.numberOfRanges).map { i in
+                let r = m.range(at: i)
+                return r.location == NSNotFound ? nil : ns.substring(with: r)
+            }
+            result += ns.substring(with: NSRange(location: last, length: m.range.location - last))
+            result += f(groups) ?? ns.substring(with: m.range)
+            last = m.range.location + m.range.length
+        }
+        result += ns.substring(from: last)
+        return result
+    }
+
+    /// "SuperTennis Arena, Bologna 25 November 2026" → "SuperTennis Arena, Bologna · 25. Nov. 2026"
+    static func venueAndDate(_ s: String) -> String {
+        let t = text(s)
+        guard let r = t.range(of: #"\s+(\d{1,2}\.(–\d{1,2}\.)? [A-ZÄa-zä]+\.?( \d{4})?)$"#, options: .regularExpression) else { return t }
+        let date = t[r].trimmingCharacters(in: .whitespaces)
+        let place = t[..<r.lowerBound].trimmingCharacters(in: CharacterSet(charactersIn: " ,"))
+        return place.isEmpty ? date : "\(place) · \(date)"
+    }
 }
