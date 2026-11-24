@@ -302,7 +302,7 @@ enum DataChecks {
             var traces: [String] = []
             for t in season where t.tier != .team && missing.contains(t.name) {
                 guard traces.count < 3 else { break }
-                let title = await TournamentLogos.articleTitle(t)
+                let title = TournamentLogos.articleTitle(t)
                 traces.append("\(t.name): " + (await WikiLogo.eventLogoTrace(english: title, germanQueries: TournamentLogos.germanQueries(t))))
             }
             return "\(found) of \(found + missing.count) have logos || " + traces.joined(separator: " || ") + " || missing: " + missing.joined(separator: ", ")

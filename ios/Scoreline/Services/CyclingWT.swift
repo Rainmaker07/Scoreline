@@ -137,6 +137,8 @@ struct CyclingTeamProfile {
     let roster: WikiTable?
     let wins: WikiTable?
     let extract: String?
+    /// What was looked up (for the data checks).
+    var trace: String = ""
 }
 
 enum CyclingPeople {
