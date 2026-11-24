@@ -89,20 +89,30 @@ struct EditionBody: View {
             } else {
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
                     ForEach(def.jerseys, id: \.key) { j in
-                        HStack(spacing: 10) {
+                        let leader = edition.leader(j.key)
+                        let card = HStack(spacing: 10) {
                             JerseyBadge(color: j.color)
                             VStack(alignment: .leading, spacing: 1) {
                                 Text(j.label).font(.caption2).foregroundStyle(Theme.secondary)
                                     .lineLimit(1).minimumScaleFactor(0.75)
-                                Text(edition.leader(j.key) ?? "—").font(.footnote.weight(.bold))
+                                Text(leader ?? "—").font(.footnote.weight(.bold))
                                     .lineLimit(2).minimumScaleFactor(0.7)
                             }
                             Spacer(minLength: 0)
+                            if leader != nil {
+                                Image(systemName: "chevron.right").font(.caption2.weight(.bold)).foregroundStyle(Theme.tertiary)
+                            }
                         }
                         // Same height for all four cards, whatever the name length.
                         .frame(maxWidth: .infinity, minHeight: 46, maxHeight: 46, alignment: .leading)
                         .padding(12)
                         .background(Theme.card, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .contentShape(Rectangle())
+                        if let leader {
+                            NavigationLink(value: Route.rider(name: leader)) { card }.buttonStyle(.plain)
+                        } else {
+                            card
+                        }
                     }
                 }
                 Picker("", selection: $tab) {

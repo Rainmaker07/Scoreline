@@ -115,7 +115,7 @@ private func zones(_ league: League, group: StandingGroup, rows: [StandingRow], 
     case .soccer:
         return rows.map { soccerZone($0.noteText) }
     case .baseball:
-        if divisions { return Array(repeating: nil, count: n) }
+        if divisions { return byIndex { i in i == 0 ? Zone(label: "Division Leader", color: Color(hex: "30d158")) : nil } }
         return byIndex { i in
             i < 3 ? Zone(label: "Division Leaders", color: Color(hex: "30d158"))
                 : i < 6 ? Zone(label: "Wild Card", color: Color(hex: "64d2ff")) : nil
@@ -274,7 +274,10 @@ struct StandingsTable: View {
 
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text(group.name).font(.headline)
+                // Division view: "AL East" instead of "American League East".
+                Text(divisions ? group.name.replacingOccurrences(of: "American League", with: "AL")
+                                    .replacingOccurrences(of: "National League", with: "NL") : group.name)
+                    .font(.headline)
                 Spacer()
                 if !live.filter({ !$0.value.text.isEmpty }).isEmpty {
                     HStack(spacing: 5) { LivePulse(); Text("LIVE") }

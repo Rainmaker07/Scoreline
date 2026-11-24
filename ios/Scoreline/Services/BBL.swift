@@ -342,12 +342,17 @@ enum BBL {
     // MARK: Stat leaders
 
     /// Top 10 per category from the season player stats on easycredit-bbl.de/statistiken/spieler.
-    static func leaders() async throws -> [LeaderCategory] {
+    /// Season stats of every player (one row each) from the statistics page.
+    static func seasonPlayerRows() async throws -> [J] {
         let props = try await page("/statistiken/spieler", maxAge: 3600)
         guard let widget = props["preloadedWidgetData"].dict.first(where: { $0.key.contains("season-players-statistics") })?.value else {
             throw FetchError.parse("Stats widget missing")
         }
-        let rows = widget["data"].array
+        return widget["data"].array
+    }
+
+    static func leaders() async throws -> [LeaderCategory] {
+        let rows = try await seasonPlayerRows()
         let maxGames = rows.map { $0["gamesPlayed"].int ?? 0 }.max() ?? 0
         // Averages only count players with at least 40 % of the games.
         let qualified = rows.filter { Double($0["gamesPlayed"].int ?? 0) >= Double(maxGames) * 0.4 }
@@ -409,15 +414,27 @@ enum BBL {
         add("BBL games", pl["bblGamesPlayed"].int.map(String.init))
 
         let avg = p["averageStatistics"]["playerAverage"]
-        let lg = p["averageStatistics"]["leagueAverage"]
+        // League rank among qualified players (the site's own "league average" is all zeros).
+        let pool = (try? await seasonPlayerRows()) ?? []
+        let maxGames = pool.map { $0["gamesPlayed"].int ?? 0 }.max() ?? 0
+        let qualified = pool.filter { Double($0["gamesPlayed"].int ?? 0) >= Double(maxGames) * 0.4 }
+        let me = qualified.first { r in
+            let sp = r["seasonPlayer"]
+            return sp["playerId"].str == id || sp["id"].str == id || String(sp["realPlayerId"].int ?? -1) == id
+        }
+        func rank(_ key: String) -> String? {
+            guard let me, let mine = me[key].double else { return nil }
+            let lowerIsBetter = key.hasPrefix("turnovers")
+            let better = qualified.filter { lowerIsBetter ? ($0[key].double ?? 0) < mine : ($0[key].double ?? 0) > mine }.count
+            return " (\(BBL.ordinal(better + 1)))"
+        }
         let names: [(String, String)] = [("pointsPerGame", "Points"), ("totalReboundsPerGame", "Rebounds"), ("assistsPerGame", "Assists"),
                                          ("stealsPerGame", "Steals"), ("blocksPerGame", "Blocks"), ("turnoversPerGame", "Turnovers"),
                                          ("efficiencyPerGame", "Efficiency")]
         let season = names.compactMap { pair -> InfoRow? in
             let (k, label) = pair
             guard let v = avg[k].double else { return nil }
-            let l = lg[k].double.map { String(format: " (league %.1f)", $0) } ?? ""
-            return InfoRow(label: label + " per game", value: String(format: "%.1f", v) + l)
+            return InfoRow(label: label + " per game", value: String(format: "%.1f", v) + (rank(k) ?? ""))
         }
         let labels = ["GP", "MIN", "PTS", "REB", "AST", "STL", "BLK", "FG%", "3P%", "FT%", "EFF"]
         let rows = p["seasonStatistics"].array.map { s -> (name: String, values: [String]) in

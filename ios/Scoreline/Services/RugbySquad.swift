@@ -67,4 +67,21 @@ enum RugbySquad {
         let order = groups.map(\.name) + ["Squad"]
         return players.sorted { (order.firstIndex(of: $0.group ?? "") ?? 99) < (order.firstIndex(of: $1.group ?? "") ?? 99) }
     }
+
+    /// What the club article contains (for the data checks when no squad is found).
+    static func diagnose(teamName: String) async -> String {
+        let title = articles[teamName] ?? teamName
+        guard let url = CyclingService.wikiURL(title) else { return "bad title" }
+        guard let html = try? await HTTP.shared.text(url, maxAge: 86_400) else { return "\(title): page not loaded" }
+        let chunks = WikiHTML.chunks(in: html)
+        let squadish = chunks.filter { $0.title.lowercased().contains("squad") || $0.title.lowercased().contains("player") }
+        var parts: [String] = ["\(title): \(chunks.count) sections"]
+        for c in squadish.prefix(4) {
+            let tables = WikiHTML.tables(in: c.html)
+            let heads = tables.prefix(3).map { "[" + ($0.rows.first ?? []).prefix(5).joined(separator: "/") + "] r\($0.rows.count)" }
+            parts.append("'\(c.title)': \(tables.count) tables \(heads.joined(separator: " "))")
+        }
+        if squadish.isEmpty { parts.append("sections: " + chunks.prefix(25).map(\.title).joined(separator: ", ")) }
+        return parts.joined(separator: " ; ")
+    }
 }

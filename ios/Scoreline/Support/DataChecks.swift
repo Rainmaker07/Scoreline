@@ -96,6 +96,18 @@ enum DataChecks {
                 return "\(cats.count) categories"
             }
         }
+        for (g, label) in [(7, "AL"), (8, "NL")] {
+            add("ESPN", "MLB \(label) leaders") {
+                let cats = try await ESPN.leaders(dcLeague("mlb"), group: g)
+                try dcExpect(cats.count >= 10, "only \(cats.count) categories")
+                return "\(cats.count) categories, AVG leader \(cats.first?.leaders.first?.name ?? "?")"
+            }
+        }
+        add("ESPN", "MLB fielding leaders") {
+            let cats = try await ESPN.mlbFielding(group: nil)
+            try dcExpect(cats.count >= 4, "only \(cats.count) categories")
+            return "\(cats.count) categories"
+        }
         add("ESPN", "Team page") {
             let l = dcLeague("nba")
             guard let row = try await ESPN.standings(l, divisions: false).flatMap(\.rows).first else {
@@ -236,6 +248,43 @@ enum DataChecks {
             let t = try await CyclingPeople.team(team)
             try dcExpect(t.roster != nil, "\(team): no roster")
             return team
+        }
+
+        // MARK: Diagnostics (always pass; the detail shows what the sources contain)
+        add("Diagnostics", "Rugby squads") {
+            let names = try await ESPN.standings(dcLeague("prem"), divisions: false).flatMap(\.rows).map(\.name)
+            var out: [String] = []
+            for n in names {
+                let squad = await RugbySquad.load(teamName: n)
+                if squad.isEmpty {
+                    let why = await RugbySquad.diagnose(teamName: n)
+                    out.append("\(n): EMPTY -> \(why)")
+                }
+                else { out.append("\(n): \(squad.count)") }
+            }
+            return out.joined(separator: " || ")
+        }
+        add("Diagnostics", "Tennis logos") {
+            let season = try await Tennis.season(dcYear)
+            var missing: [String] = []
+            var found = 0
+            for t in season where t.tier != .team {
+                let logo = await TournamentLogos.logo(t)
+                if logo != nil { found += 1 } else { missing.append(t.name) }
+            }
+            return "\(found) of \(found + missing.count) have logos; missing: " + missing.joined(separator: ", ")
+        }
+        add("Diagnostics", "Cycling teams") {
+            let tour = TourDef.all[1]
+            let y = CyclingService.isFinished(tour, dcYear) ? dcYear : dcYear - 1
+            let e = try await CyclingService.load(tour, year: y)
+            var out: [String] = []
+            for t in e.teams.prefix(24) {
+                let s = await Wiki.summary(t.name)
+                let p = try? await CyclingPeople.team(t.name)
+                out.append("\(t.name) -> '\(s?.title ?? "-")' (\(s?.description ?? "-")) img=\(s?.image?.lastPathComponent ?? "-") roster=\(p?.roster != nil) wins=\(p?.wins != nil)")
+            }
+            return out.joined(separator: " || ")
         }
 
         // MARK: Photos and logos

@@ -688,7 +688,7 @@ private struct GameLeadersCard: View {
                     if !trailing { headshot(x) }
                     VStack(alignment: trailing ? .trailing : .leading, spacing: 1) {
                         Text(x["athlete"]["shortName"].str).font(.subheadline.weight(.bold))
-                        Text(x["displayValue"].str).font(.caption).foregroundStyle(Theme.secondary)
+                        Text(x["displayValue"].str).font(.title3.weight(.heavy)).monospacedDigit()
                     }
                     if trailing { headshot(x) }
                 }

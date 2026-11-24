@@ -25,6 +25,8 @@ struct StatTable: Hashable {
     let rows: [(name: String, values: [String])]
     /// Optional team logo per row (career tables).
     var rowLogos: [URL?] = []
+    /// Optional destination per row (e.g. a competition the app covers).
+    var rowRoutes: [Route?] = []
 
     static func == (a: StatTable, b: StatTable) -> Bool { a.title == b.title && a.labels == b.labels && a.rows.map(\.name) == b.rows.map(\.name) }
     func hash(into h: inout Hasher) { h.combine(title); h.combine(labels) }
@@ -372,6 +374,23 @@ extension ESPN {
 
     static func sportPath(_ league: League) -> String? { league.espn }
 
+    /// "2026-27 English Premier League" -> ("Premier League", epl); unknown competitions keep a clean name.
+    static func competitionLabel(_ raw: String) -> (name: String, league: League?) {
+        var n = raw.replacingOccurrences(of: #"^\d{4}(-\d{2})?\s+"#, with: "", options: .regularExpression)
+        for p in ["English ", "German ", "UEFA ", "FIFA ", "Spanish ", "Italian ", "French "] where n.hasPrefix(p) { n.removeFirst(p.count) }
+        let lower = n.lowercased()
+        let map: [(String, String)] = [("premier league", "epl"), ("2. bundesliga", "bl2"), ("bundesliga", "bl1"),
+                                       ("champions league", "ucl"), ("europa conference", "uecl"), ("conference league", "uecl"),
+                                       ("europa league", "uel"), ("dfb", "dfb"), ("german cup", "dfb"), ("fa cup", "fac")]
+        if lower.contains("community shield") { return ("Community Shield", nil) }
+        if lower.contains("friendl") { return ("Friendlies", nil) }
+        if let hit = map.first(where: { lower.contains($0.0) && !lower.contains("women") }), let l = League.byId(hit.1) {
+            return (l.short, l)
+        }
+        if lower == "fa community shield" { return ("Community Shield", nil) }
+        return (n, nil)
+    }
+
     static func player(_ league: League, id: String) async throws -> PlayerPage {
         guard let path = league.espn else { throw FetchError.parse("No ESPN path") }
         let base = "\(common)/\(path)/athletes/\(id)"
@@ -409,11 +428,20 @@ extension ESPN {
             (sp["displayName"].str, zip(statNames, sp["stats"].array.map(\.str)).map { InfoRow(label: $0, value: $1) })
         }
         if !ovs["labels"].array.isEmpty {
-            tables.append(StatTable(
+            let splits = ovs["splits"].array
+            // Football: "2026-27 UEFA Nations League" -> "Nations League", with logo and a link
+            // to the competition when the app covers it.
+            let comps = splits.map { competitionLabel($0["displayName"].str) }
+            var table = StatTable(
                 title: ovs["displayName"].string ?? "Stats",
                 labels: ovs["labels"].array.map(\.str),
-                rows: ovs["splits"].array.map { ($0["displayName"].str, $0["stats"].array.map(\.str)) }
-            ))
+                rows: zip(comps, splits).map { ($0.0.name, $0.1["stats"].array.map(\.str)) }
+            )
+            if league.family == .soccer {
+                table.rowLogos = comps.map { $0.league?.logo }
+                table.rowRoutes = comps.map { $0.league.map { Route.league($0.id) } }
+            }
+            tables.append(table)
             if season.isEmpty, let first = ovs["splits"].array.first {
                 let labels = ovs["displayNames"].array.map(\.str)
                 season = zip(labels, first["stats"].array.map(\.str)).map { InfoRow(label: $0, value: $1) }

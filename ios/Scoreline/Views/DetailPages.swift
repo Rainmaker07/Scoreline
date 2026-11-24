@@ -31,7 +31,10 @@ struct StatTableView: View {
     /// Optional destination per row (game log rows open the game).
     var routes: [Route?] = []
 
-    private func route(_ i: Int) -> Route? { i < routes.count ? routes[i] : nil }
+    private func route(_ i: Int) -> Route? {
+        if i < routes.count { return routes[i] }
+        return i < table.rowRoutes.count ? table.rowRoutes[i] : nil
+    }
 
     @ViewBuilder private func linked<C: View>(_ i: Int, @ViewBuilder _ c: () -> C) -> some View {
         if let r = route(i) {
@@ -62,7 +65,7 @@ struct StatTableView: View {
                         }
                     }
                 }
-                .frame(width: table.rowLogos.isEmpty && routes.isEmpty ? 104 : 124, alignment: .leading)
+                .frame(width: table.rowLogos.isEmpty && routes.isEmpty && table.rowRoutes.isEmpty ? 104 : 138, alignment: .leading)
                 ScrollView(.horizontal, showsIndicators: false) {
                     VStack(alignment: .trailing, spacing: 0) {
                         HStack(spacing: 0) {

@@ -14,7 +14,7 @@ permissions:
 jobs:
   build:
     runs-on: macos-15
-    timeout-minutes: 50
+    timeout-minutes: 60
     env:
       BUNDLE_ID: com.rainmaker07.scoreline
     steps:
@@ -111,12 +111,12 @@ jobs:
           mkdir -p shots
           xcrun simctl launch "$UDID" "$BUNDLE_ID" -runDataChecks YES -AppleLocale de_DE
           DATA=$(xcrun simctl get_app_container "$UDID" "$BUNDLE_ID" data)
-          for i in $(seq 1 120); do
+          for i in $(seq 1 240); do
             [ -f "$DATA/Documents/data-checks.json" ] && break
             sleep 3
           done
           if [ ! -f "$DATA/Documents/data-checks.json" ]; then
-            echo '[{"group":"CI","name":"Data checks","ok":false,"detail":"did not finish in 6 minutes","seconds":360}]' > shots/data-checks.json
+            echo '[{"group":"CI","name":"Data checks","ok":false,"detail":"did not finish in 12 minutes","seconds":360}]' > shots/data-checks.json
           else
             cp "$DATA/Documents/data-checks.json" shots/data-checks.json
           fi

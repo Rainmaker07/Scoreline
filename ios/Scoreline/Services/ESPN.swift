@@ -333,8 +333,13 @@ enum ESPN {
                 )
             }
         }
-        guard let url = URL(string: "\(siteV3)/\(path)/leaders" + (group.map { "?group=\($0)" } ?? "")) else { return [] }
-        let d = try await HTTP.shared.json(url, maxAge: 1800)
+        // site.web.api serves the AL/NL groups reliably (site.api sometimes answers 500); retry once.
+        guard let url = URL(string: "https://site.web.api.espn.com/apis/site/v3/sports/\(path)/leaders" + (group.map { "?group=\($0)" } ?? "")) else { return [] }
+        let d: J
+        do { d = try await HTTP.shared.json(url, maxAge: 1800) } catch {
+            try await Task.sleep(nanoseconds: 800_000_000)
+            d = try await HTTP.shared.json(url, maxAge: 1800)
+        }
         return d["leaders"]["categories"].array.compactMap { c in
             let name = c["name"].str
             if skippedLeaderCategories.contains(name) { return nil }
