@@ -238,7 +238,7 @@ struct PlaysSection: View {
     }
 
     var body: some View {
-        let plays = summary["plays"].array.filter(isEvent)
+        let plays = summary["plays"].array.filter { isEvent($0) && !$0["text"].str.trimmingCharacters(in: .whitespaces).isEmpty }
         let shown = (scoringOnly ? plays.filter { $0["scoringPlay"].bool == true } : plays).reversed()
         VStack(spacing: 14) {
             WinProbabilityCard(summary: summary, home: homeSide, away: awaySide)
@@ -317,12 +317,13 @@ private struct WinProbabilityCard: View {
             let last = points.last?.1 ?? 50
             VStack(alignment: .leading, spacing: 10) {
                 CardTitle("Win probability")
+                // Same order as the header: away team left, home team right.
                 HStack {
-                    LogoView(url: home.logo, fallback: home.abbr, size: 20)
-                    Text(String(format: "%@ %.0f%%", home.abbr, last)).font(.subheadline.weight(.bold))
-                    Spacer()
-                    Text(String(format: "%@ %.0f%%", away.abbr, 100 - last)).font(.subheadline.weight(.bold))
                     LogoView(url: away.logo, fallback: away.abbr, size: 20)
+                    Text(String(format: "%@ %.0f%%", away.abbr, 100 - last)).font(.subheadline.weight(.bold))
+                    Spacer()
+                    Text(String(format: "%@ %.0f%%", home.abbr, last)).font(.subheadline.weight(.bold))
+                    LogoView(url: home.logo, fallback: home.abbr, size: 20)
                 }
                 Chart {
                     ForEach(points, id: \.0) { p in
@@ -355,8 +356,11 @@ struct FotMobStatsSection: View {
     let homeColor: String?
     let awayColor: String?
 
+    @State private var data: FotMobMatch.Data?
+    @State private var loading = true
+
     var body: some View {
-        Loader(id: "fm-\(game.id)", poll: { _ in game.state == .live ? 60 : nil }, load: { await FotMobMatch.load(game) }) { data in
+        Group {
             if let data {
                 VStack(spacing: 14) {
                     if let xg = data.xg { XGCard(data: data, xg: xg, homeColor: homeColor, awayColor: awayColor) }
@@ -368,6 +372,21 @@ struct FotMobStatsSection: View {
                     }
                     Text("Advanced stats: FotMob").font(.caption2).foregroundStyle(Theme.tertiary)
                 }
+            } else if loading {
+                ProgressView().tint(.white).frame(maxWidth: .infinity).padding(20)
+            } else {
+                Text("Expected goals and shot map aren’t available for this match.")
+                    .font(.caption).foregroundStyle(Theme.tertiary).frame(maxWidth: .infinity)
+            }
+        }
+        .task(id: game.id) {
+            while !Task.isCancelled {
+                let d = await FotMobMatch.load(game)
+                if Task.isCancelled { return }
+                if let d { data = d }
+                loading = false
+                guard game.state == .live else { return }
+                try? await Task.sleep(nanoseconds: 60_000_000_000)
             }
         }
     }
