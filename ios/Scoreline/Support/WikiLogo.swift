@@ -132,12 +132,22 @@ enum WikiLogo {
     /// The infobox logo of an article: an image named "...logo...", else (unless `strict`)
     /// the first real image inside the infobox, skipping flags and small icons.
     /// `strict` only accepts images named logo or drawings (SVG), not photos.
-    static func infoboxLogo(in html: String, strict: Bool = false) -> URL? {
+    static func infoboxLogo(in html: String, strict: Bool = false, title: String? = nil) -> URL? {
         let inBox = boxImages(html)
         func name(_ u: String) -> String { (URL(string: "https:" + u)?.lastPathComponent ?? u).lowercased() }
         let notLogo = ["map", "karte", "location", "route", "profile", "profil", "jersey", "maillot", "kit_", "trikot", "trophy", "pokal"]
         let named = inBox.first { name($0.url).contains("logo") }
         let drawing = inBox.first { img in let n = name(img.url); return n.contains(".svg") && !notLogo.contains { w in n.contains(w) } }
+            ?? inBox.first { img in let n = name(img.url); return n.hasSuffix(".png") && !notLogo.contains { w in n.contains(w) } }
+            ?? title.flatMap { (t: String) -> (url: String, tag: String)? in
+                // A photo-format file named after the event itself ("UAE_Tour.jpg") is its logo.
+                let key = t.lowercased().filter { $0.isLetter || $0.isNumber }
+                return key.count < 4 ? nil : inBox.first { img in
+                    let stem = name(img.url).replacingOccurrences(of: #"^\d+px-"#, with: "", options: .regularExpression)
+                        .components(separatedBy: ".").first?.filter { $0.isLetter || $0.isNumber } ?? ""
+                    return stem == key
+                }
+            }
         let any = inBox.first { img in let n = name(img.url); return !notLogo.contains { w in n.contains(w) } }
         let pick = named ?? drawing ?? (strict ? nil : any)
             ?? images(html).first { name($0.url).contains("logo") && usable($0.url, $0.tag) }
@@ -150,7 +160,7 @@ enum WikiLogo {
         if let hit = cache[key] { return hit }
         var url: URL?
         if let u = articleURL(english, lang: "en"), let html = try? await HTTP.shared.text(u, maxAge: 86_400 * 14) {
-            url = infoboxLogo(in: html, strict: true)
+            url = infoboxLogo(in: html, strict: true, title: english)
         }
         var tried = Set<String>()
         queries: for query in germanQueries where url == nil {
@@ -160,7 +170,7 @@ enum WikiLogo {
             for page in j["pages"].array {
                 guard let t = page["title"].string, tried.insert(t).inserted, let u = articleURL(t, lang: "de"),
                       let html = try? await HTTP.shared.text(u, maxAge: 86_400 * 14),
-                      let logo = infoboxLogo(in: html, strict: true) else { continue }
+                      let logo = infoboxLogo(in: html, strict: true, title: t) else { continue }
                 url = logo
                 break queries
             }
