@@ -116,6 +116,7 @@ struct GameHero: View {
 
 enum DetailTab: String, CaseIterable {
     case summary = "Summary", events = "Events", lineups = "Lineups", box = "Box Score", stats = "Stats"
+    case preview = "Preview", plays = "Plays"
 }
 
 struct DetailTabs: View {
@@ -171,7 +172,12 @@ private struct GameDetailContent: View {
         let right = g.ordered.right
         let soccer = league.family == .soccer
         let rugby = league.family == .rugby
-        let tabs: [DetailTab] = rugby ? [.events, .lineups] : soccer ? [.events, .lineups, .stats] : [.summary, .box, .stats]
+        // Before kick-off: a preview; during and after: play-by-play for NBA/MLB.
+        let pre = g.state == .pre
+        let hasPlays = league.family == .basketball || league.family == .baseball
+        let tabs: [DetailTab] = rugby ? (pre ? [.preview, .lineups] : [.events, .lineups])
+            : soccer ? (pre ? [.preview, .lineups] : [.events, .lineups, .stats])
+            : (pre ? [.preview, .summary] : hasPlays ? [.summary, .plays, .box, .stats] : [.summary, .box, .stats])
         let current = tab ?? tabs[0]
         VStack(spacing: 14) {
             GameHero(game: g, left: left, right: right, note: g.note ?? comp["series"]["summary"].string,
@@ -179,6 +185,11 @@ private struct GameDetailContent: View {
             Group {
                 DetailTabs(tabs: tabs, selection: Binding(get: { current }, set: { tab = $0 }))
                 switch current {
+                case .preview:
+                    PreviewSection(league: league, summary: summary, left: left, right: right, game: g)
+                    GameInfoCard(summary: summary)
+                case .plays:
+                    PlaysSection(league: league, summary: summary, left: left, right: right)
                 case .events where rugby:
                     RugbyEventsCard(game: game, homeId: g.home.id)
                     GameInfoCard(summary: summary)
@@ -204,6 +215,10 @@ private struct GameDetailContent: View {
                         MessageCard(text: "The box score appears once the game starts.")
                     }
                 case .stats:
+                    // Football: FotMob's xG, momentum and shot map first, then ESPN's team stats.
+                    if soccer {
+                        FotMobStatsSection(game: g, homeColor: g.home.color, awayColor: g.away.color)
+                    }
                     TeamStatsCard(league: league, summary: summary, left: left, right: right)
                     if summary["boxscore"]["teams"].array.allSatisfy({ !$0["statistics"].exists || $0["statistics"].array.isEmpty }) {
                         MessageCard(text: "Team stats appear once the game starts.")

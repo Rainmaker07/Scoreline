@@ -108,6 +108,33 @@ enum DataChecks {
             try dcExpect(cats.count >= 4, "only \(cats.count) categories")
             return "\(cats.count) categories"
         }
+        add("ESPN", "NBA play-by-play + win probability") {
+            guard let g = try await GameFeed.days(dcLeague("nba"), dcDaysBack(6)).last(where: { $0.state == .post }) else {
+                throw DataCheckFailure(message: "no finished game")
+            }
+            let s = try await ESPN.summary(dcLeague("nba"), id: g.id)
+            try dcExpect(s["plays"].array.count > 100, "only \(s["plays"].array.count) plays")
+            try dcExpect(s["winprobability"].array.count > 20, "no win probability")
+            return "\(s["plays"].array.count) plays"
+        }
+        add("ESPN", "NBA preview") {
+            let today = Calendar.current.startOfDay(for: Date())
+            let days = (1...3).map { Calendar.current.date(byAdding: .day, value: $0, to: today)! }
+            guard let g = try await GameFeed.days(dcLeague("nba"), days).first(where: { $0.state == .pre }) else { return "no upcoming game" }
+            let s = try await ESPN.summary(dcLeague("nba"), id: g.id)
+            try dcExpect(!s["lastFiveGames"].array.isEmpty, "no recent form")
+            return "predictor \(s["predictor"].exists ? "yes" : "no"), odds \(s["pickcenter"].array.isEmpty ? "no" : "yes"), injuries \(s["injuries"].array.count)"
+        }
+        add("FotMob", "Match data (xG, shots, ratings)") {
+            guard let g = try await GameFeed.days(dcLeague("epl"), dcDaysBack(9)).last(where: { $0.state == .post }) else {
+                throw DataCheckFailure(message: "no finished game")
+            }
+            guard let d = await FotMobMatch.load(g) else { throw DataCheckFailure(message: "\(g.home.name) v \(g.away.name): match not found on FotMob") }
+            try dcExpect(d.xg != nil, "no xG")
+            try dcExpect(!d.shots.isEmpty, "no shot map")
+            try dcExpect(!d.ratings.isEmpty, "no ratings")
+            return "\(g.home.abbr) v \(g.away.abbr): xG \(String(format: "%.2f-%.2f", d.xg?.home ?? 0, d.xg?.away ?? 0)), \(d.shots.count) shots"
+        }
         add("ESPN", "Team page") {
             let l = dcLeague("nba")
             guard let row = try await ESPN.standings(l, divisions: false).flatMap(\.rows).first else {

@@ -162,6 +162,8 @@ jobs:
           shot 13-football-events   14 -selectedLeague epl -shotRoute game:epl
           shot 14-football-lineups  14 -selectedLeague epl -shotRoute game:epl -shotGameTab Lineups
           shot 15-football-stats    14 -selectedLeague epl -shotRoute game:epl -shotGameTab Stats
+          shot 15b-nba-plays        14 -selectedLeague nba -shotRoute game:nba -shotGameTab Plays
+          shot 15c-football-xg      16 -selectedLeague epl -shotRoute game:epl -shotGameTab Stats
           shot 16-nba-team          12 -selectedLeague nba -shotRoute team:nba:13
           shot 17-football-team     12 -selectedLeague epl -shotRoute team:epl:359
           shot 18-nba-player        12 -selectedLeague nba -shotRoute player:nba:1966
