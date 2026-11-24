@@ -309,10 +309,11 @@ private struct WinProbabilityCard: View {
 
     var body: some View {
         let points = summary["winprobability"].array.enumerated().compactMap { i, w -> (Int, Double)? in
-            w["homeWinPercentage"].double.map { (i, $0 * 100) }
+            // Plotted for the away team (left in the header): up means the left team leads.
+            w["homeWinPercentage"].double.map { (i, 100 - $0 * 100) }
         }
         if points.count > 3 {
-            let last = points.last?.1 ?? 50
+            let last = 100 - (points.last?.1 ?? 50)
             VStack(alignment: .leading, spacing: 10) {
                 CardTitle("Win probability")
                 // Same order as the header: away team left, home team right.
@@ -325,9 +326,9 @@ private struct WinProbabilityCard: View {
                 }
                 Chart {
                     ForEach(points, id: \.0) { p in
-                        AreaMark(x: .value("Play", p.0), yStart: .value("Base", 50), yEnd: .value("Home", p.1))
+                        AreaMark(x: .value("Play", p.0), yStart: .value("Base", 50), yEnd: .value("Away", p.1))
                             .foregroundStyle(Color.white.opacity(0.12))
-                        LineMark(x: .value("Play", p.0), y: .value("Home", p.1))
+                        LineMark(x: .value("Play", p.0), y: .value("Away", p.1))
                             .foregroundStyle(.white)
                             .lineStyle(StrokeStyle(lineWidth: 1.5))
                     }
@@ -337,7 +338,7 @@ private struct WinProbabilityCard: View {
                 .chartXAxis(.hidden)
                 .chartYAxis {
                     AxisMarks(values: [0, 50, 100]) { v in
-                        AxisValueLabel { Text(v.as(Int.self) == 100 ? home.abbr : v.as(Int.self) == 0 ? away.abbr : "50%") }
+                        AxisValueLabel { Text(v.as(Int.self) == 100 ? away.abbr : v.as(Int.self) == 0 ? home.abbr : "50%") }
                     }
                 }
                 .frame(height: 140)

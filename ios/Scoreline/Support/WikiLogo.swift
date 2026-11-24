@@ -57,6 +57,10 @@ enum WikiLogo {
         if ["flag", "flagge", "icon", "symbol", "pictogram", "commons-logo", "wiktionary", "edit-", "ambox", "question_book",
             "padlock", "wikidata", "loudspeaker", "disambig"].contains(where: { l.contains($0) }) { return false }
         if l.contains("current_event") { return false }
+        // Series logos (ATP 250, UCI World Tour) aren't the event's own logo.
+        let file = (URL(string: "https:" + u)?.lastPathComponent ?? l).lowercased()
+        if file.contains("atp") && ["250", "500", "1000", "world_tour", "tour_logo", "masters"].contains(where: { file.contains($0) }) { return false }
+        if file.contains("uci") && ["world", "tour", "logo", "proseries"].contains(where: { file.contains($0) }) { return false }
         // Thumbnail size in the path ("/40px-Name.svg.png"): small ones are icons.
         if let r = u.range(of: #"/\d+px-"#, options: .regularExpression),
            let n = Int(u[r].filter(\.isNumber)), n < 60 { return false }
