@@ -624,7 +624,7 @@ struct TennisPlayerView: View {
                                 InfoRow(label: "Titles", value: s.titles.isEmpty ? "0" : "\(s.titles.count) (\(s.titles.joined(separator: ", ")))"),
                                 InfoRow(label: "Finals", value: "\(s.finals)"),
                             ])
-                            if !s.results.isEmpty { TennisResultsCard(results: s.results) }
+                            if !s.results.isEmpty { TennisResultsCard(results: s.results, year: info.seasonYear) }
                             if !s.matches.isEmpty { TennisMatchesCard(matches: Array(s.matches.prefix(10))) }
                         }
                         InfoList(title: "Career", rows: info.career)
@@ -653,23 +653,41 @@ struct TennisPlayerView: View {
 
 private struct TennisResultsCard: View {
     let results: [(tournament: String, tier: TennisTier, result: String)]
+    var year: Int = Calendar.current.component(.year, from: Date())
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            CardTitle("Tournaments")
-            ForEach(Array(results.enumerated()), id: \.offset) { i, r in
-                if i > 0 { Divider().overlay(Theme.separator) }
-                HStack(spacing: 8) {
-                    Text(r.tournament).font(.subheadline.weight(.semibold)).lineLimit(1).minimumScaleFactor(0.85)
-                    TierBadge(tier: r.tier)
-                    Spacer(minLength: 8)
-                    Text(r.result == "Won" ? "🏆 Won" : r.result)
-                        .font(.subheadline.weight(r.result == "Won" ? .bold : .regular))
-                        .foregroundStyle(r.result == "Won" ? Color.yellow : Theme.secondary)
+        // Tournament rows open the draw (matched by name in the season calendar).
+        Loader(id: "tennis-season-\(year)", load: { (try? await Tennis.season(year)) ?? [] }) { season in
+            VStack(alignment: .leading, spacing: 0) {
+                CardTitle("Tournaments")
+                ForEach(Array(results.enumerated()), id: \.offset) { i, r in
+                    if i > 0 { Divider().overlay(Theme.separator) }
+                    let t = season.first { Tennis.cleanName($0.name) == r.tournament || $0.name == r.tournament }
+                    Group {
+                        if let t {
+                            NavigationLink(value: Route.tournament(t)) { row(r, link: true) }.buttonStyle(.plain)
+                        } else {
+                            row(r, link: false)
+                        }
+                    }
                 }
-                .padding(.vertical, 8)
             }
+            .card()
         }
-        .card()
+    }
+
+    private func row(_ r: (tournament: String, tier: TennisTier, result: String), link: Bool) -> some View {
+        HStack(spacing: 8) {
+            Text(r.tournament).font(.subheadline.weight(.semibold)).lineLimit(2).minimumScaleFactor(0.85)
+            TierBadge(tier: r.tier)
+            Spacer(minLength: 8)
+            Text(r.result == "Won" ? "🏆 Won" : r.result)
+                .font(.subheadline.weight(r.result == "Won" ? .bold : .regular))
+                .foregroundStyle(r.result == "Won" ? Color.yellow : Theme.secondary)
+            if link { Image(systemName: "chevron.right").font(.system(size: 10, weight: .bold)).foregroundStyle(Theme.tertiary) }
+        }
+        .padding(.vertical, 8)
+        .contentShape(Rectangle())
     }
 }
 
@@ -680,23 +698,97 @@ private struct TennisMatchesCard: View {
             CardTitle("Recent matches")
             ForEach(Array(matches.enumerated()), id: \.offset) { i, m in
                 if i > 0 { Divider().overlay(Theme.separator) }
-                HStack(spacing: 10) {
-                    Text(m.won ? "W" : "L")
-                        .font(.caption.weight(.heavy)).foregroundStyle(.white)
-                        .frame(width: 22, height: 22)
-                        .background(m.won ? Color(hex: "30d158") : Color(hex: "ff453a"), in: RoundedRectangle(cornerRadius: 6))
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text("vs \(m.opponent)").font(.subheadline.weight(.semibold)).lineLimit(1)
-                        Text("\(m.tournament) · \(m.round) · \(Fmt.date(m.date))")
-                            .font(.caption).foregroundStyle(Theme.secondary).lineLimit(1)
+                NavigationLink {
+                    TennisMatchView(match: m)
+                } label: {
+                    HStack(spacing: 10) {
+                        Text(m.won ? "W" : "L")
+                            .font(.caption.weight(.heavy)).foregroundStyle(.white)
+                            .frame(width: 22, height: 22)
+                            .background(m.won ? Color(hex: "30d158") : Color(hex: "ff453a"), in: RoundedRectangle(cornerRadius: 6))
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("vs \(m.opponent)").font(.subheadline.weight(.semibold)).lineLimit(1)
+                            Text("\(m.tournament) · \(m.round)")
+                                .font(.caption).foregroundStyle(Theme.secondary).lineLimit(2)
+                            Text(Fmt.date(m.date)).font(.caption).foregroundStyle(Theme.tertiary)
+                        }
+                        Spacer(minLength: 6)
+                        Text(m.score).font(.footnote.weight(.semibold)).monospacedDigit().lineLimit(1).fixedSize()
+                        Image(systemName: "chevron.right").font(.system(size: 10, weight: .bold)).foregroundStyle(Theme.tertiary)
                     }
-                    Spacer(minLength: 6)
-                    Text(m.score).font(.footnote.weight(.semibold)).monospacedDigit().lineLimit(1).fixedSize()
+                    .padding(.vertical, 8)
+                    .contentShape(Rectangle())
                 }
-                .padding(.vertical, 8)
+                .buttonStyle(.plain)
             }
         }
         .card()
+    }
+}
+
+/// One singles match: both players, set by set with tiebreaks, round, tournament and date.
+/// (ESPN has no per-match statistics for tennis.)
+struct TennisMatchView: View {
+    let match: Tennis.PlayerMatch
+
+    var body: some View {
+        let m = match
+        ScrollView {
+            VStack(spacing: 14) {
+                VStack(spacing: 6) {
+                    HStack(spacing: 6) {
+                        Text(m.tournament).font(.headline)
+                        TierBadge(tier: m.tier)
+                    }
+                    Text("\(m.round) · \(Fmt.date(m.date))").font(.subheadline).foregroundStyle(Theme.secondary)
+                }
+                .padding(.top, 8)
+                VStack(spacing: 0) {
+                    playerRow(name: m.playerName.isEmpty ? "Player" : m.playerName, id: m.playerId, flag: m.playerFlag,
+                              won: m.won, games: m.sets.map { ($0.mine, $0.theirs, $0.tiebreak) })
+                    Divider().overlay(Theme.separator)
+                    playerRow(name: m.opponent, id: m.opponentId, flag: m.opponentFlag,
+                              won: !m.won, games: m.sets.map { ($0.theirs, $0.mine, $0.tiebreak) })
+                }
+                .card()
+                Text("Tiebreak points of the set's loser are shown small. ESPN has no detailed match statistics for tennis.")
+                    .font(.caption2).foregroundStyle(Theme.tertiary).multilineTextAlignment(.center)
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 40)
+        }
+        .background(Theme.bg.ignoresSafeArea())
+        .navigationTitle(m.round)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.visible, for: .navigationBar)
+    }
+
+    private func playerRow(name: String, id: String, flag: URL?, won: Bool, games: [(Int, Int, Int?)]) -> some View {
+        HStack(spacing: 10) {
+            NavigationLink(value: Route.tennisPlayer(id: id, name: name)) {
+                HStack(spacing: 8) {
+                    TennisPhoto(name: name, espn: URL(string: "https://a.espncdn.com/i/headshots/tennis/players/full/\(id).png"), size: 40)
+                    if let flag { CachedImage(url: flag) { $0.resizable().scaledToFit() } placeholder: { Color.clear }.frame(width: 20, height: 14) }
+                    Text(name).font(.subheadline.weight(won ? .heavy : .regular)).lineLimit(2)
+                        .foregroundStyle(won ? .white : Theme.secondary)
+                    if won { Image(systemName: "checkmark").font(.caption.weight(.bold)).foregroundStyle(Theme.win) }
+                }
+            }
+            .buttonStyle(.plain)
+            .disabled(id.isEmpty)
+            Spacer(minLength: 6)
+            ForEach(Array(games.enumerated()), id: \.offset) { _, g in
+                HStack(alignment: .top, spacing: 0) {
+                    Text("\(g.0)").font(.title3.weight(g.0 > g.1 ? .heavy : .regular)).monospacedDigit()
+                        .foregroundStyle(g.0 > g.1 ? .white : Theme.secondary)
+                    if let tb = g.2, g.0 < g.1 {
+                        Text("\(tb)").font(.system(size: 10, weight: .semibold)).foregroundStyle(Theme.secondary)
+                    }
+                }
+                .frame(minWidth: 26)
+            }
+        }
+        .padding(.vertical, 10)
     }
 }
 

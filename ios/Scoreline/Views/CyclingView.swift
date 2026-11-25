@@ -10,11 +10,14 @@ struct CyclingView: View {
         VStack(alignment: .leading, spacing: 12) {
             Picker("", selection: $tab) {
                 Text("Race Calendar").tag(0)
+                Text("Teams").tag(2)
                 Text("Rankings").tag(1)
             }
             .pickerStyle(.segmented)
             if tab == 1 {
                 CyclingRankingsView(refresh: refresh)
+            } else if tab == 2 {
+                CyclingTeamsView(refresh: refresh)
             } else {
                 WorldTourList(refresh: refresh)
             }
@@ -322,5 +325,112 @@ struct KindBadge: View {
         case .mountain: return (Color(hex: "f87171"), Color(hex: "3b1f1f"))
         case .itt, .ttt: return (Color(hex: "60a5fa"), Color(hex: "1f2b3b"))
         }
+    }
+}
+
+
+/// All WorldTeams (sorted by season wins) and ProTeams; each opens the team page.
+struct CyclingTeamsView: View {
+    var refresh = 0
+
+    private struct Row: Identifiable {
+        var id: String { team.name }
+        let team: CyclingTeams.Team
+        let logo: URL?
+        let wins: Int?
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Loader(id: "wt-teams-\(refresh)", load: { () async throws -> [Row] in
+                let teams = try await CyclingTeams.worldTeams()
+                // Logo and season wins from each team page (six at a time).
+                let rows: [Row] = await withTaskGroup(of: Row.self) { group in
+                    var out: [Row] = []
+                    var next = 0
+                    while next < min(6, teams.count) {
+                        let t = teams[next]
+                        group.addTask {
+                            let p = try? await CyclingPeople.team(t.name)
+                            return Row(team: t, logo: p?.image, wins: p?.wins.map { max(0, $0.rows.count - 1) })
+                        }
+                        next += 1
+                    }
+                    for await r in group {
+                        out.append(r)
+                        if next < teams.count {
+                            let t = teams[next]
+                            group.addTask {
+                                let p = try? await CyclingPeople.team(t.name)
+                                return Row(team: t, logo: p?.image, wins: p?.wins.map { max(0, $0.rows.count - 1) })
+                            }
+                            next += 1
+                        }
+                    }
+                    return out
+                }
+                return rows.sorted { ($0.wins ?? -1, $1.team.name) > ($1.wins ?? -1, $0.team.name) }
+            }) { rows in
+                section("UCI WorldTeams", rows: rows, showWins: true)
+            }
+            Loader(id: "pro-teams-\(refresh)", load: { try await CyclingTeams.proTeams().map { Row(team: $0, logo: nil, wins: nil) } }) { rows in
+                section("UCI ProTeams", rows: rows, showWins: false)
+            }
+            Text("Teams from Wikipedia's UCI WorldTeam and ProTeam lists; wins from each team's season article.")
+                .font(.caption2).foregroundStyle(Theme.tertiary).padding(.horizontal, 4)
+        }
+    }
+
+    @ViewBuilder private func section(_ title: String, rows: [Row], showWins: Bool) -> some View {
+        if rows.isEmpty {
+            MessageCard(text: "\(title): not available right now.")
+        } else {
+            VStack(alignment: .leading, spacing: 0) {
+                CardTitle(title)
+                ForEach(Array(rows.enumerated()), id: \.element.id) { i, r in
+                    if i > 0 { Divider().overlay(Theme.separator) }
+                    NavigationLink(value: Route.cyclingTeam(r.team.name)) {
+                        HStack(spacing: 12) {
+                            TeamLogoBadge(name: r.team.name, logo: r.logo)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(r.team.name).font(.subheadline.weight(.semibold)).lineLimit(2).minimumScaleFactor(0.85)
+                                if let c = r.team.country { Text(c).font(.caption).foregroundStyle(Theme.secondary) }
+                            }
+                            Spacer(minLength: 6)
+                            if showWins, let w = r.wins {
+                                VStack(spacing: 0) {
+                                    Text("\(w)").font(.headline.weight(.heavy)).monospacedDigit()
+                                    Text(w == 1 ? "win" : "wins").font(.caption2).foregroundStyle(Theme.secondary)
+                                }
+                            }
+                            Image(systemName: "chevron.right").font(.system(size: 10, weight: .bold)).foregroundStyle(Theme.tertiary)
+                        }
+                        .padding(.vertical, 8)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .card()
+        }
+    }
+}
+
+/// Team logo (looked up from the team page when not given), else initials.
+struct TeamLogoBadge: View {
+    let name: String
+    let logo: URL?
+    @State private var found: URL??
+
+    var body: some View {
+        let url = logo ?? (found ?? nil)
+        LogoView(url: url, fallback: name, size: 32)
+            .padding(3)
+            .background(Color.white.opacity(url == nil ? 0 : 0.9), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .frame(width: 38, height: 38)
+            .task(id: name) {
+                guard logo == nil, found == nil else { return }
+                found = .some((try? await CyclingPeople.team(name))?.image)
+            }
     }
 }

@@ -68,7 +68,7 @@ private struct RaceRow: View {
     var body: some View {
         NavigationLink(value: Route.cyclingRace(race)) {
             HStack(spacing: 12) {
-                RaceLogo(race: race, size: 30)
+                RaceLogo(race: race, size: 36)
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
                         Text(race.name).font(.subheadline.weight(.semibold)).lineLimit(1).minimumScaleFactor(0.8)
@@ -404,27 +404,98 @@ struct CyclingRankingsView: View {
     }
 }
 
-/// Race logo from Wikipedia (English article, then German) on a light badge;
-/// the flag / map icon when no logo exists.
+/// Race logo from Wikipedia (English article, then German). Transparent logos sit
+/// directly on the card; dark ones and logos with their own white background get a
+/// soft light tile (white margins trimmed). The flag / map icon when no logo exists.
 struct RaceLogo: View {
     let race: WTRace
-    var size: CGFloat = 30
-    @State private var url: URL?
+    var size: CGFloat = 34
+    @State private var prepared: PreparedLogo?
 
     var body: some View {
         Group {
-            if let url {
-                LogoView(url: url, fallback: race.name, size: size - 4)
-                    .padding(2)
-                    .background(Color.white, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+            if let p = prepared {
+                Image(uiImage: p.image).resizable().scaledToFit()
+                    .padding(p.needsTile ? 3 : 0)
+                    .frame(width: size, height: size)
+                    .background(p.needsTile ? Color.white.opacity(0.92) : .clear,
+                                in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             } else {
                 Image(systemName: race.isOneDay ? "flag.checkered" : "map")
-                    .font(.system(size: size * 0.53))
+                    .font(.system(size: size * 0.5))
                     .foregroundStyle(race.isGrandTour ? Color.yellow : Theme.secondary)
             }
         }
         .frame(width: size, height: size)
-        .task(id: race.id) { url = await RaceLogos.logo(race) }
+        .task(id: race.id) {
+            guard let url = await RaceLogos.logo(race), let img = await ImageStore.shared.image(url) else { return }
+            prepared = await LogoPrep.prepare(img, key: url.absoluteString)
+        }
+    }
+}
+
+struct PreparedLogo {
+    let image: UIImage
+    let needsTile: Bool
+}
+
+/// Looks at a logo once: trims empty or white margins, and decides whether it needs a
+/// light tile (no transparency, or dark artwork that would vanish on a dark card).
+enum LogoPrep {
+    private static var cache: [String: PreparedLogo] = [:]
+
+    static func prepare(_ img: UIImage, key: String) async -> PreparedLogo {
+        if let hit = cache[key] { return hit }
+        let result = await Task.detached(priority: .utility) { analyse(img) }.value
+        cache[key] = result
+        return result
+    }
+
+    private static func analyse(_ img: UIImage) -> PreparedLogo {
+        guard let cg = img.cgImage else { return PreparedLogo(image: img, needsTile: true) }
+        // Draw into a small RGBA buffer to inspect the pixels.
+        let w = min(cg.width, 160), h = max(1, Int(Double(cg.height) * Double(w) / Double(max(cg.width, 1))))
+        guard let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
+                                  space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+        else { return PreparedLogo(image: img, needsTile: true) }
+        ctx.draw(cg, in: CGRect(x: 0, y: 0, width: w, height: h))
+        guard let raw = ctx.data else { return PreparedLogo(image: img, needsTile: true) }
+        // Rows in memory run top to bottom.
+        let px = raw.bindMemory(to: UInt8.self, capacity: w * h * 4)
+        var transparent = 0, opaque = 0, lumSum = 0.0
+        var minX = w, minY = h, maxX = -1, maxY = -1
+        for y in 0..<h {
+            for x in 0..<w {
+                let i = (y * w + x) * 4
+                let a = Double(px[i + 3]) / 255
+                if a < 0.1 { transparent += 1; continue }
+                let r = Double(px[i]) / 255 / a, g = Double(px[i + 1]) / 255 / a, b = Double(px[i + 2]) / 255 / a
+                let lum = 0.2126 * r + 0.7152 * g + 0.0722 * b
+                let isWhite = lum > 0.94 && a > 0.9
+                if !isWhite {
+                    opaque += 1
+                    lumSum += lum
+                    minX = min(minX, x); maxX = max(maxX, x); minY = min(minY, y); maxY = max(maxY, y)
+                }
+            }
+        }
+        let hasAlpha = Double(transparent) / Double(w * h) > 0.08
+        let meanLum = opaque > 0 ? lumSum / Double(opaque) : 1
+        // Transparent and light enough for a dark card: no tile.
+        let needsTile = !hasAlpha || meanLum < 0.38
+        // Trim margins (white or transparent) with a little breathing room.
+        var out = img
+        if maxX > minX, maxY > minY {
+            let sx = Double(cg.width) / Double(w), sy = Double(cg.height) / Double(h)
+            let pad = 2.0
+            let rect = CGRect(x: max(0, (Double(minX) - pad) * sx),
+                              y: max(0, (Double(minY) - pad) * sy),
+                              width: (Double(maxX - minX) + 2 * pad + 1) * sx,
+                              height: (Double(maxY - minY) + 2 * pad + 1) * sy)
+                .intersection(CGRect(x: 0, y: 0, width: cg.width, height: cg.height))
+            if let c = cg.cropping(to: rect.integral) { out = UIImage(cgImage: c, scale: img.scale, orientation: img.imageOrientation) }
+        }
+        return PreparedLogo(image: out, needsTile: needsTile)
     }
 }
 

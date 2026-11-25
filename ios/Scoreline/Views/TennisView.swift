@@ -69,25 +69,19 @@ private struct TournamentList: View {
 struct TierBadge: View {
     let tier: TennisTier
     var body: some View {
-        // Official tier logos; the text badge stays until (or if) the logo loads.
-        if let url = logo {
-            CachedImage(url: url) { phase in
-                if case .success(let img) = phase {
-                    img.resizable().scaledToFit().frame(height: 22).frame(maxWidth: 48)
-                } else {
-                    textBadge
-                }
-            }
+        // Official tier logos (bundled, transparent); text badge for the other tiers.
+        if let asset {
+            Image(asset).resizable().scaledToFit().frame(height: 22).frame(maxWidth: 52)
         } else {
             textBadge
         }
     }
 
-    private var logo: URL? {
+    private var asset: String? {
         switch tier {
-        case .t500: return LogoAssets.atp500
-        case .t250: return LogoAssets.atp250
-        case .masters: return LogoAssets.masters1000
+        case .t500: return "ATP500"
+        case .t250: return "ATP250"
+        case .masters: return "Masters1000"
         default: return nil
         }
     }
@@ -521,16 +515,58 @@ struct TennisPhoto: View {
 }
 
 enum TennisPhotos {
-    /// ESPN first; if that image doesn't exist, the photo from the player's Wikipedia article.
+    private static var cache: [String: URL?] = [:]
+
+    /// ESPN first; then studio headshots from ATP Tour and SofaScore (same style as ESPN's);
+    /// Wikipedia only where allowed (player page header).
     static func url(name: String, espn: URL?, wikipedia: Bool = true) async -> URL? {
-        if let espn, await ImageStore.shared.image(espn) != nil { return espn }
-        guard wikipedia else { return nil }
-        for title in [name + " (tennis)", name] {
-            if let s = await Wiki.summary(title), let img = s.image,
-               (s.description ?? "").lowercased().contains("tennis") || title.contains("tennis") {
-                return img
+        let key = name + (wikipedia ? "|w" : "")
+        if let hit = cache[key] { return hit }
+        var found: URL?
+        if let espn, await ImageStore.shared.image(espn) != nil { found = espn }
+        if found == nil { found = await atpHeadshot(name) }
+        if found == nil { found = await sofascoreHeadshot(name) }
+        if found == nil, wikipedia {
+            for title in [name + " (tennis)", name] {
+                if let s = await Wiki.summary(title), let img = s.image,
+                   (s.description ?? "").lowercased().contains("tennis") || title.contains("tennis") {
+                    found = img
+                    break
+                }
             }
         }
-        return nil
+        cache[key] = found
+        return found
+    }
+
+    private static func fold(_ s: String) -> String {
+        s.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .init(identifier: "en"))
+    }
+
+    /// ATP Tour player search -> official headshot.
+    static func atpHeadshot(_ name: String) async -> URL? {
+        guard let q = name.addingPercentEncoding(withAllowedCharacters: .alphanumerics),
+              let url = URL(string: "https://www.atptour.com/en/-/ajax/PredictiveContentSearch/GetPlayerResults/\(q)"),
+              let d = try? await HTTP.shared.json(url, maxAge: 86_400 * 30) else { return nil }
+        let items = d["items"].array.isEmpty ? d["Items"].array : d["items"].array
+        guard let hit = items.first(where: { fold(($0["PlayerFirstName"].str + " " + $0["PlayerLastName"].str)) == fold(name) }) ?? items.first,
+              let id = (hit["PlayerId"].string ?? hit["playerId"].string)?.lowercased(),
+              let img = URL(string: "https://www.atptour.com/-/media/alias/player-headshot/\(id)"),
+              await ImageStore.shared.image(img) != nil else { return nil }
+        return img
+    }
+
+    /// SofaScore player search (tennis) -> player image.
+    static func sofascoreHeadshot(_ name: String) async -> URL? {
+        guard let q = name.addingPercentEncoding(withAllowedCharacters: .alphanumerics),
+              let url = URL(string: "https://api.sofascore.com/api/v1/search/all?q=\(q)&page=0"),
+              let d = try? await HTTP.shared.json(url, maxAge: 86_400 * 30) else { return nil }
+        let players = d["results"].array.filter { $0["type"].str == "player" && $0["entity"]["sport"]["slug"].str == "tennis" }
+        let target = fold(name)
+        guard let hit = players.first(where: { fold($0["entity"]["name"].str) == target }) ?? players.first,
+              let id = hit["entity"]["id"].int,
+              let img = URL(string: "https://api.sofascore.app/api/v1/player/\(id)/image"),
+              await ImageStore.shared.image(img) != nil else { return nil }
+        return img
     }
 }

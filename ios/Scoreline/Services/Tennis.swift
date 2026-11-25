@@ -106,6 +106,14 @@ enum TournamentLogos {
         }
         let title = wikiTitle(t.name)
         if let hit = cache[title] { return hit }
+        // Logos the infobox lookup can't find (named oddly on Wikipedia).
+        let files: [(String, String)] = [("abn amro", "de:ABN_Amro_World_Tennis_Tournament.jpg")]
+        if let f = files.first(where: { t.name.lowercased().contains($0.0) }) {
+            let parts = f.1.split(separator: ":", maxSplits: 1)
+            let url = URL(string: "https://\(parts[0]).wikipedia.org/wiki/Special:FilePath/\(parts[1])?width=300")
+            cache[title] = url
+            return url
+        }
         // Only infobox logos (the lead image is often a photo of the venue); English article
         // first, then the German one ("ATP Brisbane" etc.), which has logos for most events.
         let url = await WikiLogo.eventLogo(english: title, germanQueries: germanQueries(t))
@@ -233,7 +241,7 @@ enum Tennis {
 
     // MARK: Player season
 
-    struct PlayerMatch: Identifiable {
+    struct PlayerMatch: Identifiable, Hashable {
         var id: String
         let date: Date
         let tournament: String
@@ -242,6 +250,19 @@ enum Tennis {
         let opponent: String
         let won: Bool
         let score: String
+        var playerId: String = ""
+        var playerName: String = ""
+        var playerFlag: URL? = nil
+        var opponentId: String = ""
+        var opponentFlag: URL? = nil
+        /// Games per set: (player, opponent, tiebreak points of the set loser if any).
+        var sets: [SetScore] = []
+    }
+
+    struct SetScore: Hashable {
+        let mine: Int
+        let theirs: Int
+        let tiebreak: Int?
     }
 
     struct PlayerSeason {
@@ -282,8 +303,17 @@ enum Tennis {
                     let theirs = them["linescores"].array.map { Int($0["value"].double ?? 0) }
                     let score = zip(mine, theirs).map { "\($0)-\($1)" }.joined(separator: " ")
                     let won = me["winner"].bool == true
+                    let myTB = me["linescores"].array.map { $0["tiebreak"].int }
+                    let theirTB = them["linescores"].array.map { $0["tiebreak"].int }
+                    let sets = zip(mine, theirs).enumerated().map { i, g in
+                        SetScore(mine: g.0, theirs: g.1, tiebreak: (i < myTB.count ? myTB[i] : nil) ?? (i < theirTB.count ? theirTB[i] : nil))
+                    }
                     matches.append(PlayerMatch(id: c["id"].str, date: date, tournament: name, tier: tier, round: round,
-                                               opponent: them["athlete"]["displayName"].str, won: won, score: score))
+                                               opponent: them["athlete"]["displayName"].str, won: won, score: score,
+                                               playerId: id, playerName: me["athlete"]["displayName"].str,
+                                               playerFlag: me["athlete"]["flag"]["href"].url,
+                                               opponentId: them["id"].str, opponentFlag: them["athlete"]["flag"]["href"].url,
+                                               sets: sets))
                     let idx = order.firstIndex(of: round) ?? (round.contains("Round Robin") || round.contains("Group") ? 4 : 0)
                     if idx >= best { best = idx; bestRound = round }
                     if round == "Final" { finals += 1; if won { wonFinal = true; titles.append(name) } }

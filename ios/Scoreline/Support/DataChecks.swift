@@ -224,6 +224,19 @@ enum DataChecks {
             try dcExpect(r.prefix(20).filter { $0.headshot != nil }.count >= 10, "photos missing")
             return "\(r.count) players"
         }
+        add("Diagnostics", "Tennis headshots") {
+            // Top 100: how many photos each source delivers (ESPN, then ATP Tour, then SofaScore).
+            let r = try await Tennis.rankings().prefix(100)
+            var espn = 0, atp = 0, sofa = 0, none: [String] = []
+            for p in r {
+                if let h = p.headshot, await ImageStore.shared.image(h) != nil { espn += 1; continue }
+                if await TennisPhotos.atpHeadshot(p.name) != nil { atp += 1; continue }
+                if await TennisPhotos.sofascoreHeadshot(p.name) != nil { sofa += 1; continue }
+                none.append(p.name)
+            }
+            return "\(espn + atp + sofa) of \(r.count) have photos: ESPN \(espn), ATP Tour \(atp), SofaScore \(sofa)"
+                + (none.isEmpty ? "" : " || none: " + none.prefix(30).joined(separator: ", "))
+        }
         add("Tennis", "Laver Cup") {
             let y = Calendar.current.component(.month, from: Date()) >= 10 ? dcYear : dcYear - 1
             let d = try await LaverCup.load(year: y, finished: true)
@@ -376,6 +389,12 @@ enum DataChecks {
             }
             throw DataCheckFailure(message: "no ranking table || " + report.joined(separator: " || "))
         }
+        add("Cycling", "Team lists") {
+            let wt = try await CyclingTeams.worldTeams()
+            let pro = (try? await CyclingTeams.proTeams()) ?? []
+            try dcExpect(wt.count >= 15, "only \(wt.count) WorldTeams: \(wt.prefix(5).map(\.name))")
+            return "\(wt.count) WorldTeams (\(wt.first?.name ?? "?")), \(pro.count) ProTeams"
+        }
         add("Cycling", "Win leaders") {
             let list = try await CyclingRankings.winLeaders(dcYear)
             try dcExpect(!list.isEmpty, "no wins counted")
@@ -391,7 +410,7 @@ enum DataChecks {
             return "OK"
         }
         add("Images", "Competition logos") {
-            let urls: [URL?] = [LogoAssets.nbaCup, LogoAssets.atp, LogoAssets.uciWorldTour, LogoAssets.atp500,
+            let urls: [URL?] = [LogoAssets.nbaCup, LogoAssets.atp, LogoAssets.uciWorldTour,
                                 LogoAssets.australianOpen, LogoAssets.rolandGarros, LogoAssets.wimbledon, LogoAssets.usOpen,
                                 LogoAssets.giro, LogoAssets.tour, LogoAssets.vuelta]
             var broken: [String] = []

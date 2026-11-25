@@ -1,7 +1,7 @@
 import Foundation
 
 /// Competition logos, loaded at runtime from Wikimedia and cached on device.
-/// They are never bundled with the app or committed to the repository.
+/// (Only the ATP tier badges are bundled, in Assets.xcassets.)
 enum LogoAssets {
     private static func u(_ s: String) -> URL? { URL(string: s) }
 
@@ -18,10 +18,6 @@ enum LogoAssets {
     static let tour = u("https://upload.wikimedia.org/wikipedia/commons/thumb/5/50/Tour_de_France_logo_%28black_background%29.svg/330px-Tour_de_France_logo_%28black_background%29.svg.png")
     static let vuelta = u("https://upload.wikimedia.org/wikipedia/commons/thumb/4/4b/La_Vuelta_%28Spain%29_logo.svg/330px-La_Vuelta_%28Spain%29_logo.svg.png")
 
-    /// Tier logos from logodix.com/atp (current ATP style, transparent PNGs).
-    static let atp250 = u("https://logodix.com/logo/1903239.png")
-    static let masters1000 = u("https://logodix.com/logo/1903249.png")
-    static let atp500 = u("https://upload.wikimedia.org/wikipedia/commons/b/b5/ATP_500_logo_%28as_of_2026%29.png")
 
     static func slam(_ id: String) -> URL? {
         switch id {
