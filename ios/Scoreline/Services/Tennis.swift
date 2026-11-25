@@ -546,12 +546,14 @@ enum ATPRace {
         let entries: [Entry] = t.rows.dropFirst().enumerated().compactMap { i, r in
             guard r.count > max(nameCol, ptsCol) else { return nil }
             let (name, country) = CyclingService.splitRider(r[nameCol])
-            let clean = name.replacingOccurrences(of: #"[\*†‡]|\(Q\)|\[.*?\]"#, with: "", options: .regularExpression)
+            // "Alexander Zverev (GER) ✓" -> "Alexander Zverev"; ✓ marks a qualified player.
+            let clean = name.replacingOccurrences(of: #"[\*†‡✓✔]|\(Q\)|\([A-Z]{3}\)|\[.*?\]"#, with: "", options: .regularExpression)
                 .trimmingCharacters(in: .whitespaces)
             guard !clean.isEmpty else { return nil }
             let rank = Int(r.first?.filter(\.isNumber) ?? "") ?? i + 1
             // Qualified players are marked "(Q)" or have a cell that is just "Q".
-            let q = r[nameCol].contains("(Q)") || r.contains("Q") || r.contains { $0.lowercased() == "qualified" }
+            let q = r[nameCol].contains("(Q)") || r[nameCol].contains("✓") || r[nameCol].contains("✔")
+                || r.contains("Q") || r.contains { $0.lowercased() == "qualified" }
             return Entry(rank: rank, name: clean, country: country, points: r[ptsCol], qualified: q)
         }
         return (title, entries)
