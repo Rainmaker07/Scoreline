@@ -231,7 +231,8 @@ enum DataChecks {
                 // Report the tables near "Race to" so the parser can be fixed.
                 guard let url = CyclingService.wikiURL("\(dcYear) ATP Tour") else { return "bad title" }
                 let html = try await HTTP.shared.text(url, maxAge: 3600)
-                let heads = WikiHTML.tables(in: html).prefix(14).map { "[" + ($0.rows.first ?? []).prefix(5).joined(separator: "/") + "]" }
+                let heads = WikiHTML.tables(in: html).filter { $0.rows.prefix(3).joined().joined().lowercased().contains("point") }
+                    .prefix(6).map { "[" + $0.rows.prefix(3).map { $0.prefix(5).joined(separator: "/") }.joined(separator: " | ") + "]" }
                 throw DataCheckFailure(message: "no race table (\(html.lowercased().contains("race to") ? "has" : "no") 'race to'); tables: " + heads.joined(separator: " "))
             }
             return "\(r.title): \(r.entries.count) players, leader \(r.entries[0].name) \(r.entries[0].points), \(r.entries.filter(\.qualified).count) marked Q"

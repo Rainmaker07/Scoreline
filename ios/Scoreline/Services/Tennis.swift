@@ -511,8 +511,18 @@ enum ATPRace {
         }
         // The race table near "Race to …"; after the season the article only keeps the
         // year-end ranking table, which then equals the final race.
+        // A table with "Player" and "Points" in one of its first rows (ranking tables often
+        // have a title row above the column headers). Returns the table from that header on.
         func pick(_ tables: [WikiTable]) -> WikiTable? {
-            tables.first { ($0.column("player") != nil || $0.column("name") != nil) && ($0.column("point") != nil || $0.column("pts") != nil) }
+            for t in tables {
+                for (h, row) in t.rows.prefix(3).enumerated() {
+                    let l = row.map { $0.lowercased() }
+                    if l.contains(where: { $0.contains("player") || $0 == "name" }) && l.contains(where: { $0.contains("point") || $0 == "pts" }) {
+                        return WikiTable(caption: t.caption, rows: Array(t.rows.dropFirst(h)))
+                    }
+                }
+            }
+            return nil
         }
         var found = pick(WikiHTML.tables(in: chunk))
         if found == nil {
