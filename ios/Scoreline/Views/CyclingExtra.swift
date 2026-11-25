@@ -347,7 +347,7 @@ struct CyclingRankingsView: View {
                                         Text("\(i + 1)").font(.footnote.weight(.bold)).foregroundStyle(Theme.secondary).frame(width: 22)
                                         VStack(alignment: .leading, spacing: 1) {
                                             HStack(spacing: 5) {
-                                                Text(w.name).font(.subheadline.weight(.semibold)).lineLimit(1)
+                                                Text(w.name).font(.subheadline.weight(.semibold)).lineLimit(2).minimumScaleFactor(0.85)
                                                 if let c = w.country { Text(c).font(.caption2).foregroundStyle(Theme.secondary) }
                                             }
                                             Text(w.detail).font(.caption).foregroundStyle(Theme.secondary)
@@ -382,7 +382,7 @@ struct CyclingRankingsView: View {
                                         Text("\(e.rank)").font(.footnote.weight(.bold)).foregroundStyle(Theme.secondary).frame(width: 26)
                                         VStack(alignment: .leading, spacing: 1) {
                                             HStack(spacing: 5) {
-                                                Text(e.name).font(.subheadline.weight(.semibold)).lineLimit(1)
+                                                Text(e.name).font(.subheadline.weight(.semibold)).lineLimit(2).minimumScaleFactor(0.85)
                                                 if let c = e.country { Text(c).font(.caption2).foregroundStyle(Theme.secondary) }
                                             }
                                             if let t = e.team, !t.isEmpty { Text(t).font(.caption).foregroundStyle(Theme.secondary).lineLimit(1) }

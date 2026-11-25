@@ -18,9 +18,9 @@ private func columns(_ league: League) -> [Col] {
                 Col(key: "pointsDifference", label: "PD", width: 34), Col(key: "bonusPoints", label: "BP", width: 24),
                 Col(key: "points", label: "Pts", strong: true, width: 28)]
     case .soccer:
-        return [Col(key: "gamesPlayed", label: "P", width: 24), Col(key: "wins", label: "W", width: 24),
-                Col(key: "ties", label: "D", width: 24), Col(key: "losses", label: "L", width: 24),
-                Col(key: "pointDifferential", label: "GD", width: 34), Col(key: "points", label: "Pts", strong: true, width: 32)]
+        return [Col(key: "gamesPlayed", label: "P", width: 22), Col(key: "wins", label: "W", width: 22),
+                Col(key: "ties", label: "D", width: 22), Col(key: "losses", label: "L", width: 22),
+                Col(key: "pointDifferential", label: "GD", width: 32), Col(key: "points", label: "Pts", strong: true, width: 30)]
     case .baseball:
         return [Col(key: "wins", label: "W", width: 28), Col(key: "losses", label: "L", width: 28),
                 Col(key: "winPercent", label: "PCT", strong: true, width: 40), Col(key: "gamesBehind", label: "GB", width: 32),
@@ -160,6 +160,8 @@ private func sortRows(_ league: League, _ rows: [StandingRow], divisions: Bool) 
 struct LiveInfo: Hashable {
     let text: String
     let movement: Int
+    /// Goals for minus against in the live match (colours the score line).
+    var margin: Int = 0
 }
 
 /// Adds in-progress matches to the standings as if they ended at the current score.
@@ -167,7 +169,7 @@ func applyLive(_ rows: [StandingRow], games: [Game]) -> (rows: [StandingRow], li
     let live = games.filter { $0.state == .live }
     guard !live.isEmpty else { return (rows, [:]) }
     let before = Dictionary(uniqueKeysWithValues: rows.enumerated().map { ($1.id, $0) })
-    var info: [String: String] = [:]
+    var info: [String: (String, Int)] = [:]
     var updated = rows.map { row -> StandingRow in
         guard let g = live.first(where: { $0.home.id == row.id || $0.away.id == row.id }) else { return row }
         let me = g.home.id == row.id ? g.home : g.away
@@ -181,7 +183,9 @@ func applyLive(_ rows: [StandingRow], games: [Game]) -> (rows: [StandingRow], li
         if gf > ga { bump("wins", 1); bump("points", 3) } else if gf == ga { bump("ties", 1); bump("points", 1) } else { bump("losses", 1) }
         let gd = (Int(s["pointsFor"] ?? "") ?? 0) - (Int(s["pointsAgainst"] ?? "") ?? 0)
         s["pointDifferential"] = gd > 0 ? "+\(gd)" : "\(gd)"
-        info[row.id] = "\(gf)–\(ga) \(g.home.id == row.id ? "vs" : "@") \(other.short) · \(g.statusText)"
+        // "0–0 @ GAL · 34'": opponent as a 3-letter code so the team's own name fits.
+        let code = other.abbr.isEmpty ? other.short : other.abbr
+        info[row.id] = ("\(gf)–\(ga) \(g.home.id == row.id ? "vs" : "@") \(code) · \(g.statusText)", gf - ga)
         return StandingRow(id: row.id, name: row.name, short: row.short, abbr: row.abbr, logo: row.logo,
                            stats: s, noteColor: row.noteColor, noteText: row.noteText)
     }
@@ -202,7 +206,7 @@ func applyLive(_ rows: [StandingRow], games: [Game]) -> (rows: [StandingRow], li
         result.append(StandingRow(id: r.id, name: r.name, short: r.short, abbr: r.abbr, logo: r.logo,
                                   stats: s, noteColor: z.1, noteText: z.0))
         let move = (before[r.id] ?? i) - i
-        if let t = info[r.id] { liveInfo[r.id] = LiveInfo(text: t, movement: move) }
+        if let t = info[r.id] { liveInfo[r.id] = LiveInfo(text: t.0, movement: move, margin: t.1) }
         else if move != 0 { liveInfo[r.id] = LiveInfo(text: "", movement: move) }
     }
     return (result, liveInfo)
@@ -331,6 +335,14 @@ struct StandingsTable: View {
         .padding(.vertical, 2)
     }
 
+    @ViewBuilder private func movement(_ m: Int?) -> some View {
+        if let m, m != 0 {
+            Text(m > 0 ? "▲\(m)" : "▼\(-m)")
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(m > 0 ? Theme.win : Theme.live)
+        }
+    }
+
     private func row(_ r: StandingRow, index: Int, zone: Zone?, cols: [Col], live: LiveInfo?, favorite: Bool) -> some View {
         let isOpen = expanded == r.id
         return VStack(alignment: .leading, spacing: 0) {
@@ -348,19 +360,23 @@ struct StandingsTable: View {
                     HStack(spacing: 6) {
                         LogoView(url: r.logo, fallback: r.abbr, size: 20)
                         VStack(alignment: .leading, spacing: 1) {
+                            let hasLine = !(live?.text ?? "").isEmpty
                             HStack(spacing: 4) {
+                                // Never cut a name: shrink a little, then wrap.
                                 Text(league.family == .soccer || league.family == .rugby || league.provider == .bbl ? tableName(r.short) : r.abbr)
                                     .font(.system(size: 14, weight: .semibold))
-                                    .lineLimit(1)
-                                    .minimumScaleFactor(0.9)
-                                if let m = live?.movement, m != 0 {
-                                    Text(m > 0 ? "▲\(m)" : "▼\(-m)")
-                                        .font(.system(size: 9, weight: .bold))
-                                        .foregroundStyle(m > 0 ? Theme.win : Theme.live)
-                                }
+                                    .lineLimit(2)
+                                    .minimumScaleFactor(0.8)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                if !hasLine { movement(live?.movement) }
                             }
                             if let t = live?.text, !t.isEmpty {
-                                Text(t).font(.system(size: 10, weight: .semibold)).foregroundStyle(Theme.live).lineLimit(1)
+                                // The rank change moves to the score line, leaving room for the name.
+                                HStack(spacing: 4) {
+                                    Text(t).font(.system(size: 10, weight: .semibold)).lineLimit(1)
+                                        .foregroundStyle((live?.margin ?? 0) > 0 ? Theme.win : (live?.margin ?? 0) < 0 ? Theme.live : Theme.secondary)
+                                    movement(live?.movement)
+                                }
                             }
                         }
                     }

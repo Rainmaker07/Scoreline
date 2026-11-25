@@ -278,6 +278,26 @@ enum DataChecks {
         }
 
         // MARK: Diagnostics (always pass; the detail shows what the sources contain)
+        add("Diagnostics", "Standings names") {
+            // iPhone 13: the team column is ~98 pt wide; names may shrink to 80 % and wrap to two lines.
+            let font = UIFont.systemFont(ofSize: 14, weight: .semibold)
+            let column: CGFloat = 98
+            var wraps: [String] = []
+            var tooLong: [String] = []
+            for id in ["epl", "bl1", "bl2", "ucl", "uel", "uecl", "prem"] {
+                guard let league = League.byId(id) else { continue }
+                let groups = (try? await ESPN.standings(league, divisions: false)) ?? []
+                for row in groups.flatMap(\.rows) {
+                    let name = tableName(row.short)
+                    let w = (name as NSString).size(withAttributes: [.font: font]).width
+                    if w > column * 2 / 0.8 { tooLong.append("\(name) (\(id))") }
+                    else if w > column / 0.8 { wraps.append(name) }
+                }
+            }
+            return "\(tooLong.count) too long, \(wraps.count) wrap to two lines" +
+                (tooLong.isEmpty ? "" : " || too long: " + tooLong.joined(separator: ", ")) +
+                (wraps.isEmpty ? "" : " || wrap: " + Set(wraps).sorted().joined(separator: ", "))
+        }
         add("Diagnostics", "Rugby squads") {
             let names = try await ESPN.standings(dcLeague("prem"), divisions: false).flatMap(\.rows).map(\.name)
             var out: [String] = []

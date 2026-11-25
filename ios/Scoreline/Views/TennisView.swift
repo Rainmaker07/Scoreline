@@ -454,7 +454,7 @@ private struct PlayerLine: View {
                         .clipShape(RoundedRectangle(cornerRadius: 2))
                 }
                 if starred { Image(systemName: "star.fill").font(.system(size: 10)).foregroundStyle(.yellow) }
-                Text(p.name).font(.system(size: 15, weight: .semibold)).lineLimit(1)
+                Text(p.name).font(.system(size: 15, weight: .semibold)).lineLimit(2).minimumScaleFactor(0.85)
                 if let s = p.seed { Text("(\(s))").font(.caption.weight(.semibold)).foregroundStyle(Theme.secondary) }
                 if done && p.winner == true { Image(systemName: "checkmark").font(.caption.weight(.bold)).foregroundStyle(Theme.win) }
             }

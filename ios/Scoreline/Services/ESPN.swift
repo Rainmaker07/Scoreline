@@ -143,12 +143,22 @@ enum ESPN {
         return s
     }
 
+    /// ESPN shortens some clubs to an initial ("S Bratislava", "C Palace"): use the real name instead.
+    static func displayShort(_ short: String, full: String) -> String {
+        guard short.range(of: #"^[A-Z]\.? [A-Z]"#, options: .regularExpression) != nil, !full.isEmpty else { return short }
+        var n = full
+        for p in ["1. FC ", "FC ", "AFC ", "SK ", "SC "] where n.hasPrefix(p) { n.removeFirst(p.count) }
+        for x in [" FC", " AFC", " F.C."] where n.hasSuffix(x) { n.removeLast(x.count) }
+        return n
+    }
+
     static func side(_ c: J) -> Side {
         let t = c["team"]
         return Side(
             id: t["id"].string ?? c["id"].str,
             name: t["displayName"].string ?? t["name"].str,
-            short: t["shortDisplayName"].string ?? t["name"].string ?? t["displayName"].str,
+            short: displayShort(t["shortDisplayName"].string ?? t["name"].string ?? t["displayName"].str,
+                                full: t["displayName"].string ?? t["name"].str),
             abbr: t["abbreviation"].str,
             logo: teamLogo(t),
             color: t["color"].string,
@@ -232,7 +242,7 @@ enum ESPN {
                 return StandingRow(
                     id: t["id"].str,
                     name: t["displayName"].str,
-                    short: t["shortDisplayName"].string ?? t["name"].str,
+                    short: displayShort(t["shortDisplayName"].string ?? t["name"].str, full: t["displayName"].string ?? t["name"].str),
                     abbr: t["abbreviation"].str,
                     logo: teamLogo(t),
                     stats: stats,

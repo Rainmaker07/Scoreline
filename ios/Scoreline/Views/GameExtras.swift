@@ -16,9 +16,10 @@ struct PreviewSection: View {
         VStack(spacing: 14) {
             PredictorCard(summary: summary, left: left, right: right)
             OddsCard(summary: summary, left: left, right: right)
-            FormCard(summary: summary, left: left, right: right)
-            SeriesCard(summary: summary)
-            if league.family == .soccer {
+            FormCard(leagueId: league.id, summary: summary, left: left, right: right)
+            SeriesCard(leagueId: league.id, summary: summary)
+            // FotMob's all-time head-to-head when ESPN has no recent meetings.
+            if league.family == .soccer, summary["seasonseries"].array.first?["events"].array.isEmpty ?? true {
                 Loader(id: "fm-h2h-\(game.id)", load: { await FotMobMatch.load(game) }) { data in
                     if let data { HeadToHeadCard(data: data) }
                 }
@@ -70,36 +71,83 @@ private struct PredictorCard: View {
     }
 }
 
+/// Betting odds in decimal format (European style): moneyline as home · draw · away,
+/// over/under with both prices, and the spread for US sports.
 private struct OddsCard: View {
     let summary: J
     let left: Side
     let right: Side
 
-    private var rows: [InfoRow] {
-        let o = summary["pickcenter"].array.first ?? summary["odds"].array.first ?? J(nil)
-        guard o.exists else { return [] }
-        let homeId = summary["header"]["competitions"][0]["competitors"].array.first { $0["homeAway"].str == "home" }?["id"].str
-        func ml(_ s: Side) -> String? {
-            let side = s.id == homeId ? o["homeTeamOdds"] : o["awayTeamOdds"]
-            guard let v = side["moneyLine"].int else { return nil }
-            return v > 0 ? "+\(v)" : "\(v)"
-        }
-        var rows: [InfoRow] = []
-        if let d = o["details"].string { rows.append(InfoRow(label: "Line", value: d)) }
-        if let ou = o["overUnder"].double { rows.append(InfoRow(label: "Over/under", value: String(format: "%g", ou))) }
-        if let a = ml(left), let b = ml(right) {
-            rows.append(InfoRow(label: "Moneyline", value: "\(left.abbr) \(a) · \(right.abbr) \(b)"))
-        }
-        if !rows.isEmpty, let prov = o["provider"]["name"].string { rows.append(InfoRow(label: "Source", value: prov)) }
-        return rows
+    static func decimal(_ american: Double?) -> String? {
+        guard let a = american, a != 0 else { return nil }
+        let d = a > 0 ? 1 + a / 100 : 1 + 100 / abs(a)
+        return String(format: "%.2f", d)
     }
 
     var body: some View {
-        InfoList(title: "Odds", rows: rows)
+        let o = summary["pickcenter"].array.first ?? summary["odds"].array.first ?? J(nil)
+        let homeId = summary["header"]["competitions"][0]["competitors"].array.first { $0["homeAway"].str == "home" }?["id"].str
+        func side(_ s: Side) -> J { s.id == homeId ? o["homeTeamOdds"] : o["awayTeamOdds"] }
+        let l = Self.decimal(side(left)["moneyLine"].double)
+        let r = Self.decimal(side(right)["moneyLine"].double)
+        let draw = Self.decimal(o["drawOdds"]["moneyLine"].double)
+        if o.exists, l != nil || r != nil {
+            VStack(alignment: .leading, spacing: 12) {
+                CardTitle("Odds")
+                HStack(spacing: 8) {
+                    price(left.abbr, l, logo: left.logo)
+                    if let draw { price("Draw", draw, logo: nil) }
+                    price(right.abbr, r, logo: right.logo)
+                }
+                if let ou = o["overUnder"].double {
+                    row("Over/under \(String(format: "%g", ou))",
+                        [Self.decimal(o["overOdds"].double).map { "Over \($0)" }, Self.decimal(o["underOdds"].double).map { "Under \($0)" }]
+                            .compactMap { $0 }.joined(separator: " · "))
+                }
+                if draw == nil, let spread = o["details"].string, !spread.isEmpty {
+                    let sp = Self.decimal(side(left)["spreadOdds"].double)
+                    row("Spread", spread + (sp.map { " · \($0)" } ?? ""))
+                }
+                if let prov = o["provider"]["name"].string {
+                    Text("Decimal odds · \(prov)").font(.caption2).foregroundStyle(Theme.tertiary)
+                }
+            }
+            .card()
+        }
+    }
+
+    private func price(_ label: String, _ value: String?, logo: URL?) -> some View {
+        VStack(spacing: 4) {
+            HStack(spacing: 5) {
+                if let logo { LogoView(url: logo, fallback: label, size: 16) }
+                Text(label).font(.caption.weight(.semibold)).foregroundStyle(Theme.secondary)
+            }
+            Text(value ?? "–").font(.title3.weight(.heavy)).monospacedDigit()
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 10)
+        .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    private func row(_ label: String, _ value: String) -> some View {
+        HStack {
+            Text(label).foregroundStyle(Theme.secondary)
+            Spacer()
+            Text(value).monospacedDigit()
+        }
+        .font(.subheadline)
     }
 }
 
+/// A stand-in game for links: the game page loads everything from the event id.
+func stubGame(id: String, leagueId: String, date: Date?) -> Game {
+    let blank = ESPN.side(J(nil))
+    return Game(id: id, leagueId: leagueId, date: date ?? Date(), state: .post, statusText: "Final",
+                home: blank, away: blank, note: nil, broadcast: nil, scorers: [])
+}
+
 private struct FormCard: View {
+    let leagueId: String
     let summary: J
     let left: Side
     let right: Side
@@ -116,13 +164,18 @@ private struct FormCard: View {
                             Text(side.abbr).font(.subheadline.weight(.bold)).frame(width: 44, alignment: .leading)
                             ForEach(Array(t["events"].array.prefix(5).enumerated()), id: \.offset) { _, e in
                                 let r = e["gameResult"].str
-                                VStack(spacing: 2) {
-                                    Text(r).font(.caption.weight(.heavy)).foregroundStyle(.white)
-                                        .frame(width: 24, height: 22)
-                                        .background(r == "W" ? Color(hex: "30d158") : r == "L" ? Color(hex: "ff453a") : Color(white: 0.45),
-                                                    in: RoundedRectangle(cornerRadius: 5))
-                                    LogoView(url: e["opponent"]["logo"].url, fallback: e["opponent"]["abbreviation"].str, size: 14)
+                                NavigationLink(value: Route.game(stubGame(id: e["id"].str, leagueId: leagueId,
+                                                                          date: e["gameDate"].string.flatMap(ESPNDate.parse)))) {
+                                    VStack(spacing: 2) {
+                                        Text(r).font(.caption.weight(.heavy)).foregroundStyle(.white)
+                                            .frame(width: 24, height: 22)
+                                            .background(r == "W" ? Color(hex: "30d158") : r == "L" ? Color(hex: "ff453a") : Color(white: 0.45),
+                                                        in: RoundedRectangle(cornerRadius: 5))
+                                        LogoView(url: e["opponent"]["logo"].url, fallback: e["opponent"]["abbreviation"].str, size: 14)
+                                    }
                                 }
+                                .buttonStyle(.plain)
+                                .disabled(e["id"].str.isEmpty)
                             }
                             Spacer(minLength: 0)
                         }
@@ -134,13 +187,56 @@ private struct FormCard: View {
     }
 }
 
+/// Season series / head-to-head summary and the last meetings (each opens the game).
 private struct SeriesCard: View {
+    let leagueId: String
     let summary: J
     var body: some View {
         let s = summary["seasonseries"].array.first ?? J(nil)
-        if s.exists, let text = s["summary"].string {
-            InfoList(title: s["title"].string ?? "Season series", rows: [InfoRow(label: s["seriesLabel"].string ?? "Series", value: text)])
+        let events = Array(s["events"].array.filter { $0["statusType"]["completed"].bool != false }
+            .sorted { ($0["date"].str) > ($1["date"].str) }.prefix(5))
+        if s.exists, s["summary"].string != nil || !events.isEmpty {
+            VStack(alignment: .leading, spacing: 0) {
+                CardTitle(s["seriesLabel"].string ?? "Head-to-head")
+                if let text = s["summary"].string {
+                    Text(text).font(.subheadline.weight(.semibold)).padding(.bottom, 8)
+                }
+                ForEach(Array(events.enumerated()), id: \.offset) { _, e in
+                    Divider().overlay(Theme.separator)
+                    meeting(e)
+                }
+            }
+            .card()
         }
+    }
+
+    private func meeting(_ e: J) -> some View {
+        let cs = e["competitors"].array
+        let home = cs.first { $0["homeAway"].str == "home" } ?? J(nil)
+        let away = cs.first { $0["homeAway"].str == "away" } ?? J(nil)
+        let date = e["date"].string.flatMap(ESPNDate.parse)
+        func team(_ c: J, trailing: Bool) -> some View {
+            HStack(spacing: 6) {
+                if !trailing { LogoView(url: c["team"]["logo"].url, fallback: c["team"]["abbreviation"].str, size: 18) }
+                Text(c["team"]["abbreviation"].str).font(.footnote.weight(c["winner"].bool == true ? .heavy : .regular))
+                    .foregroundStyle(c["winner"].bool == false && (home["winner"].bool == true || away["winner"].bool == true) ? Theme.secondary : .white)
+                if trailing { LogoView(url: c["team"]["logo"].url, fallback: c["team"]["abbreviation"].str, size: 18) }
+            }
+        }
+        return NavigationLink(value: Route.game(stubGame(id: e["id"].str, leagueId: leagueId, date: date))) {
+            HStack(spacing: 8) {
+                Text(date.map { Fmt.dateYear($0) } ?? "").font(.caption).foregroundStyle(Theme.secondary)
+                    .frame(width: 86, alignment: .leading)
+                team(home, trailing: false).frame(maxWidth: .infinity, alignment: .trailing)
+                Text("\(home["score"].str)–\(away["score"].str)").font(.subheadline.weight(.bold)).monospacedDigit()
+                    .frame(width: 46)
+                team(away, trailing: true).frame(maxWidth: .infinity, alignment: .leading)
+                Image(systemName: "chevron.right").font(.system(size: 10, weight: .bold)).foregroundStyle(Theme.tertiary)
+            }
+            .padding(.vertical, 8)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }
 
