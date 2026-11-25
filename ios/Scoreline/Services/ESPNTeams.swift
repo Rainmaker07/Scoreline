@@ -212,10 +212,11 @@ extension ESPN {
                          ("Bonus points", "bonusPoints"), ("League points", "points")]
                 .compactMap { pair in s[pair.1].map { InfoRow(label: pair.0, value: $0) } }
             let squad = await RugbySquad.load(teamName: row?.name ?? "")
+            let extra = await RugbyStats.teamRows(league, teamId: id)
             return TeamPage(league: league, id: id, name: row?.name ?? "", abbr: row?.abbr ?? "", logo: row?.logo,
                             color: nil, record: s["overall"].map { _ in "\(s["gamesWon"] ?? "0")-\(s["gamesDrawn"] ?? "0")-\(s["gamesLost"] ?? "0")" },
                             standing: s["rank"].map { "\(BBL.ordinal(Int($0) ?? 0)) in Premiership Rugby" },
-                            games: games, roster: squad, stats: stats, injuries: [], form: form)
+                            games: games, roster: squad, stats: stats + extra, injuries: [], form: form)
         }
         let base = "\(site)/\(path)/teams/\(id)"
         async let infoJ = HTTP.shared.json(URL(string: base)!, maxAge: 600)
@@ -407,7 +408,7 @@ extension ESPN {
             ("carabao", "EFL Cup", espnLogo(41)), ("league cup", "EFL Cup", espnLogo(41)),
             ("world cup qualifying", "WC Qualifying", espnLogo(67)),
             ("club world cup", "Club World Cup", espnLogo(1932)),
-            ("world cup", "World Cup", WikiLogo.url(for: "2026 FIFA World Cup")),
+            ("world cup", "World Cup", espnLogo(4)),
             ("nations league", "Nations League", espnLogo(2395)),
             ("european championship", "Euro", espnLogo(74)), ("euro ", "Euro", espnLogo(74)),
             ("copa del rey", "Copa del Rey", espnLogo(80)), ("coppa italia", "Coppa Italia", espnLogo(2192)),
@@ -419,6 +420,7 @@ extension ESPN {
     }
 
     static func player(_ league: League, id: String) async throws -> PlayerPage {
+        if league.family == .rugby { return try await RugbyStats.playerPage(league, id: id) }
         guard let path = league.espn else { throw FetchError.parse("No ESPN path") }
         let base = "\(common)/\(path)/athletes/\(id)"
         async let mainJ = HTTP.shared.json(URL(string: base)!, maxAge: 3600)

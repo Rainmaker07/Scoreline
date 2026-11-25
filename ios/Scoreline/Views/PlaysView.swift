@@ -139,6 +139,7 @@ struct PlaysSection: View {
     let left: Side
     let right: Side
     let live: Bool
+    let estimated: Bool
     private let plays: [PlayItem]
     private let points: [WinPoint]
     private let moments: [KeyMoment]
@@ -150,7 +151,20 @@ struct PlaysSection: View {
     @State private var highlighted: String? = nil   // play opened from a key moment
     @AppStorage("playsTab") private var tab = 0  // 0 win probability, 1 play-by-play
 
+    /// BBL: plays and an estimated win probability built from the BBL site.
+    init(league: League, left: Side, right: Side, plays: [PlayItem], points: [WinPoint], live: Bool, estimated: Bool) {
+        self.league = league
+        self.left = left
+        self.right = right
+        self.live = live
+        self.plays = plays
+        self.points = points
+        self.estimated = estimated
+        self.moments = KeyMoments.find(points, awayId: left.isHome ? right.id : left.id, homeId: left.isHome ? left.id : right.id)
+    }
+
     init(league: League, summary: J, left: Side, right: Side) {
+        self.estimated = false
         self.league = league
         self.left = left
         self.right = right
@@ -191,7 +205,7 @@ struct PlaysSection: View {
             }
             if hasChart && tab == 0 {
                 WinProbabilityCard(points: points, moments: moments, left: left, right: right,
-                                   baseball: PlayData.isBaseball(league), selected: $selected)
+                                   baseball: PlayData.isBaseball(league), estimated: estimated, selected: $selected)
                 if !moments.isEmpty {
                     KeyMomentsCard(moments: moments, left: left, right: right, selected: $selected) { m in
                         // Open the play in the play-by-play list.
@@ -296,6 +310,7 @@ private struct WinProbabilityCard: View {
     let left: Side      // away
     let right: Side     // home
     let baseball: Bool
+    var estimated = false
     @Binding var selected: Int?
 
     /// First point of each period after the first (faint marks with labels).
@@ -384,7 +399,8 @@ private struct WinProbabilityCard: View {
             }
             .frame(height: 150)
             .padding(.bottom, 14)
-            Text("Drag along the chart to follow the game. Dots mark the key moments.")
+            Text(estimated ? "Estimated from the score, time left and home advantage. Drag along the chart to follow the game."
+                           : "Drag along the chart to follow the game. Dots mark the key moments.")
                 .font(.caption2).foregroundStyle(Theme.tertiary)
         }
         .card()

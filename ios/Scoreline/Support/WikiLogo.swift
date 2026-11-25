@@ -204,4 +204,16 @@ enum WikiLogo {
         } catch { out.append("de search \(error)") }
         return out.joined(separator: "; ")
     }
+
+    /// Logo from Wikidata (property P154 "logo image") of an English Wikipedia article.
+    static func wikidataLogo(enwikiTitle: String) async -> URL? {
+        guard let q = enwikiTitle.addingPercentEncoding(withAllowedCharacters: .alphanumerics),
+              let url = URL(string: "https://www.wikidata.org/w/api.php?action=wbgetentities&sites=enwiki&titles=\(q)&props=claims&format=json"),
+              let j = try? await HTTP.shared.json(url, maxAge: 86_400 * 14) else { return nil }
+        guard let entity = j["entities"].dict.values.first,
+              let file = entity["claims"]["P154"].array.last?["mainsnak"]["datavalue"]["value"].string,
+              let enc = file.replacingOccurrences(of: " ", with: "_").addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)
+        else { return nil }
+        return URL(string: "https://commons.wikimedia.org/wiki/Special:FilePath/\(enc)?width=300")
+    }
 }

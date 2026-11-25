@@ -210,18 +210,16 @@ enum CyclingPeople {
 
     /// Team names in results -> Wikipedia article (the plain names are ambiguous or redirects).
     static let teamArticles: [String: String] = [
-        "Lidl–Trek": "Lidl–Trek (men's team)", "Lidl-Trek": "Lidl–Trek (men's team)",
-        "Movistar Team": "Movistar Team (men's team)", "Movistar": "Movistar Team (men's team)",
-        "Visma–Lease a Bike": "Visma–Lease a Bike (men's team)", "Team Visma–Lease a Bike": "Visma–Lease a Bike (men's team)",
+        "Lidl–Trek": "Lidl–Trek (men's team)", "Lidl-Trek": "Lidl–Trek (men's team)", "Movistar Team": "Movistar Team (men's team)",
+        "Movistar": "Movistar Team (men's team)", "Visma–Lease a Bike": "Visma–Lease a Bike (men's team)", "Team Visma–Lease a Bike": "Visma–Lease a Bike (men's team)",
         "Netcompany INEOS": "Ineos Grenadiers", "INEOS Grenadiers": "Ineos Grenadiers", "Ineos Grenadiers": "Ineos Grenadiers",
-        "Decathlon CMA CGM": "Decathlon CMA CGM Team", "Decathlon AG2R La Mondiale": "Decathlon CMA CGM Team",
-        "Soudal–Quick-Step": "Soudal–Quick-Step", "Alpecin–Deceuninck": "Alpecin–Premier Tech",
-        "Alpecin–Premier Tech": "Alpecin–Premier Tech", "Groupama–FDJ": "Groupama–FDJ United",
-        "Groupama–FDJ United": "Groupama–FDJ United", "Intermarché–Wanty": "Intermarché–Wanty",
-        "XDS Astana Team": "XDS Astana Team", "Astana Qazaqstan Team": "XDS Astana Team",
-        "Team Jayco–AlUla": "Team Jayco–AlUla", "Team Picnic PostNL": "Team Picnic PostNL",
-        "Cofidis": "Cofidis (cycling team)", "Uno-X Mobility": "Uno-X Mobility",
-        "Tudor Pro Cycling Team": "Tudor Pro Cycling Team", "Arkéa–B&B Hotels": "Arkéa–B&B Hotels",
+        "Decathlon CMA CGM": "Decathlon CMA CGM Team", "Decathlon AG2R La Mondiale": "Decathlon CMA CGM Team", "Soudal–Quick-Step": "Soudal–Quick-Step",
+        "Alpecin–Deceuninck": "Alpecin–Premier Tech", "Alpecin–Premier Tech": "Alpecin–Premier Tech", "Groupama–FDJ": "Groupama–FDJ United",
+        "Groupama–FDJ United": "Groupama–FDJ United", "Intermarché–Wanty": "Intermarché–Wanty", "XDS Astana Team": "XDS Astana Team",
+        "Astana Qazaqstan Team": "XDS Astana Team", "Astana": "XDS Astana Team", "Picnic PostNL": "Team Picnic PostNL",
+        "Team Picnic PostNL": "Team Picnic PostNL", "Jayco–AlUla": "Team Jayco–AlUla", "Jayco AlUla": "Team Jayco–AlUla",
+        "Arkéa–B&B Hotels": "Arkéa–B&B Hotels", "Arkea–B&B Hotels": "Arkéa–B&B Hotels", "Team Jayco–AlUla": "Team Jayco–AlUla",
+        "Cofidis": "Cofidis (cycling team)", "Uno-X Mobility": "Uno-X Mobility", "Tudor Pro Cycling Team": "Tudor Pro Cycling Team",
     ]
 
     /// Other article names to try (the team was renamed or the article has a suffix).
@@ -307,7 +305,10 @@ enum CyclingPeople {
                 break search
             }
         }
-        // No logo in the English article: try the German one.
+        // No logo in the English article: Wikidata's logo image, then the German article.
+        if logo == nil {
+            logo = await WikiLogo.wikidataLogo(enwikiTitle: title)
+        }
         if logo == nil {
             logo = await WikiLogo.eventLogo(english: "", germanQueries: [plain(title), plain(name) + " Radsportteam"])
         }

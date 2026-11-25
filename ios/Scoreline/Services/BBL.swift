@@ -198,6 +198,9 @@ enum BBL {
         let box: [String: [BoxPlayer]]               // teamId -> players
         let coaches: [String: String]
         let info: [InfoRow]
+        /// Play-by-play (oldest first) and an estimated win probability for the home team.
+        var plays: [PlayItem] = []
+        var winProb: [WinPoint] = []
     }
 
     static let boxLabels = ["MIN", "PTS", "FG", "3PT", "FT", "REB", "AST", "STL", "BLK", "TO", "PF", "+/-", "EFF"]
@@ -269,7 +272,84 @@ enum BBL {
         }
         if !refs.isEmpty { info.append(InfoRow(label: "Referees", value: refs.joined(separator: ", "))) }
         if let tv = gd["tvChannel"].string, !tv.isEmpty { info.append(InfoRow(label: "TV", value: tv)) }
-        return GameDetail(game: g, teamStats: teamStats, box: box, coaches: coaches, info: info)
+        var names: [String: String] = [:]
+        for list in box.values { for p in list { names[p.id] = p.name } }
+        let pbp = playByPlay(stats["actions"].array, names: names, homeId: g.home.id, awayId: g.away.id)
+        return GameDetail(game: g, teamStats: teamStats, box: box, coaches: coaches, info: info,
+                          plays: pbp.plays, winProb: pbp.points)
+    }
+
+    // MARK: Play-by-play
+
+    /// Turns the site's actions into plays with a running score, plus a win probability
+    /// estimate (score margin, time left and home advantage; BBL publishes none).
+    static func playByPlay(_ actions: [J], names: [String: String], homeId: String, awayId: String) -> (plays: [PlayItem], points: [WinPoint]) {
+        var home = 0, away = 0
+        var plays: [PlayItem] = []
+        var points: [WinPoint] = []
+        func clock(_ t: String) -> String {
+            // "00:09:39" -> "9:39"
+            let parts = t.split(separator: ":").compactMap { Int($0) }
+            guard parts.count == 3 else { return t }
+            return "\(parts[1]):" + String(format: "%02d", parts[2])
+        }
+        func secondsLeft(_ period: Int, _ t: String) -> Double {
+            let parts = t.split(separator: ":").compactMap { Double($0) }
+            let inPeriod = parts.count == 3 ? parts[1] * 60 + parts[2] : 0
+            let periodsAfter = Double(max(0, 4 - period))
+            return inPeriod + periodsAfter * 600
+        }
+        func estimate(_ margin: Int, _ left: Double) -> Double {
+            // Normal model: ~11 points of spread over a full game, 2.5 points home advantage.
+            let frac = max(left / 2400, 0.0005)
+            let mean = Double(margin) + 2.5 * frac
+            let sd = 11.0 * frac.squareRoot()
+            let z = mean / sd
+            return 0.5 * (1 + erf(z / 2.0.squareRoot()))
+        }
+        for a in actions {
+            let type = a["type"].str
+            let period = a["period"].int ?? 0
+            let team = a["seasonTeamId"].str
+            let ok = a["isSuccessful"].bool == true
+            let who = names[a["seasonPlayerId"].str] ?? ""
+            var text = ""
+            var scoring = false
+            switch type {
+            case "TWO_POINT_THROW", "THREE_POINT_THROW":
+                let pts = type == "TWO_POINT_THROW" ? 2 : 3
+                let q = a["qualifiers"].array.map(\.str)
+                let kind = q.contains("DUNK") ? "dunk" : q.contains("LAYUP") ? "layup" : pts == 3 ? "3-pointer" : "jump shot"
+                text = "\(who) \(ok ? "makes" : "misses") \(kind)"
+                if ok { scoring = true; if team == homeId { home += pts } else { away += pts } }
+            case "FREE_THROW":
+                text = "\(who) \(ok ? "makes" : "misses") free throw"
+                if ok { scoring = true; if team == homeId { home += 1 } else { away += 1 } }
+            case "REBOUND": text = "\(who) \(a["qualifiers"].array.map(\.str).contains("OFFENSIVE") ? "offensive" : "defensive") rebound"
+            case "TEAM_REBOUND": text = "Team rebound"
+            case "STEAL": text = "\(who) steal"
+            case "BLOCK": text = "\(who) block"
+            case "TURN_OVER", "TEAM_TURN_OVER": text = who.isEmpty ? "Turnover" : "\(who) turnover"
+            case "FOUL": text = "\(who) foul"
+            case "TIME_OUT": text = "Timeout"
+            case "SUBSTITUTION": continue
+            case "START": text = "Start of quarter \(period)"
+            case "END": text = "End of quarter \(period)"
+            case "JUMP_BALL_BEGINNING_OF_GAME", "JUMP_BALL_DURING_GAME": text = "Jump ball"
+            default: continue
+            }
+            let short = period <= 4 ? "Q\(period)" : (period == 5 ? "OT" : "\(period - 4)OT")
+            let name = period <= 4 ? "\(period). Quarter" : (period == 5 ? "Overtime" : "Overtime \(period - 4)")
+            let item = PlayItem(id: a["id"].str, period: period, periodName: name, periodShort: short,
+                                clock: clock(a["gameTime"].str), text: text.trimmingCharacters(in: .whitespaces),
+                                scoring: scoring, teamId: team == "0" ? "" : team, away: away, home: home, groupKey: "\(period)")
+            plays.append(item)
+            if scoring || type == "END" || points.isEmpty {
+                let pHome = estimate(home - away, secondsLeft(period, a["gameTime"].str))
+                points.append(WinPoint(id: points.count, away: (1 - pHome) * 100, play: item))
+            }
+        }
+        return (plays, points)
     }
 
     // MARK: Team / player pages

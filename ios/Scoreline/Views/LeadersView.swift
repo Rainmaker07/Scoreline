@@ -68,6 +68,7 @@ struct LeadersSection: View {
         Loader(id: "\(league.id)-leaders-\(refresh)" + (isMLB ? "-\(mlbLeague)-\(mlbType)" : ""),
                load: { () async throws -> [LeaderCategory] in
                    if league.provider == .bbl { return try await BBL.leaders() }
+                   if league.family == .rugby { return try await RugbyStats.leaders(league) }
                    if isMLB {
                        if mlbType == 2 { return try await ESPN.mlbFielding(group: mlbGroup) }
                        let all = try await ESPN.leaders(league, group: mlbGroup)

@@ -331,6 +331,14 @@ enum DataChecks {
                 (shortened.isEmpty ? "" : " || shortened: " + Set(shortened).sorted().joined(separator: ", ")) +
                 (smaller.isEmpty ? "" : " || smaller: " + Set(smaller).sorted().joined(separator: ", "))
         }
+        add("Rugby", "Season stats") {
+            let league = dcLeague("prem")
+            let cats = try await RugbyStats.leaders(league)
+            try dcExpect(!cats.isEmpty, "no stats counted")
+            let tries = cats.first { $0.name == "tries" }?.leaders.first
+            let pts = cats.first { $0.name == "points" }?.leaders.first
+            return "top tries \(tries?.name ?? "?") \(tries?.value ?? ""), top points \(pts?.name ?? "?") \(pts?.value ?? "")"
+        }
         add("Diagnostics", "Rugby squads") {
             let names = try await ESPN.standings(dcLeague("prem"), divisions: false).flatMap(\.rows).map(\.name)
             var out: [String] = []

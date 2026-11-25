@@ -373,10 +373,7 @@ struct CyclingTeamsView: View {
             }) { rows in
                 section("UCI WorldTeams", rows: rows, showWins: true)
             }
-            Loader(id: "pro-teams-\(refresh)", load: { try await CyclingTeams.proTeams().map { Row(team: $0, logo: nil, wins: nil) } }) { rows in
-                section("UCI ProTeams", rows: rows, showWins: false)
-            }
-            Text("Teams from Wikipedia's UCI WorldTeam and ProTeam lists; wins from each team's season article.")
+            Text("UCI WorldTeams from Wikipedia; wins from each team's season article.")
                 .font(.caption2).foregroundStyle(Theme.tertiary).padding(.horizontal, 4)
         }
     }

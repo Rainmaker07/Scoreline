@@ -157,7 +157,25 @@ private struct GameDetailContent: View {
         if a.logo == nil { a.logo = game.away.logo }
         if h.color == nil { h.color = game.home.color }
         if a.color == nil { a.color = game.away.color }
+        // Postseason: show the series record (4-1) instead of the regular season.
+        if let ps = playoffSeries {
+            let wins = Dictionary(ps["competitors"].array.map { ($0["id"].str, $0["wins"].int ?? 0) }, uniquingKeysWith: { a, _ in a })
+            if let hw = wins[h.id], let aw = wins[a.id] { h.record = "\(hw)-\(aw)"; a.record = "\(aw)-\(hw)" }
+        }
         return (h, a)
+    }
+
+    /// The playoff series this game belongs to (MLB / NBA postseason).
+    private var playoffSeries: J? {
+        comp["series"].array.first { $0["type"].str == "playoff" }
+    }
+
+    /// "World Series - Game 5 · MIL wins series 4-1"
+    private var seriesNote: String? {
+        let headline = game.note ?? summary["header"]["gameNote"].string
+        let series = playoffSeries?["summary"].string ?? comp["series"]["summary"].string
+        let parts = [headline, series].compactMap { $0 }.filter { !$0.isEmpty }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
     private var live: Game {
@@ -187,7 +205,7 @@ private struct GameDetailContent: View {
             : (pre ? [.preview, .summary] : hasPlays ? [.summary, .plays, .box, .stats] : [.summary, .box, .stats])
         let current = tab ?? tabs[0]
         VStack(spacing: 14) {
-            GameHero(game: g, left: left, right: right, note: g.note ?? comp["series"]["summary"].string,
+            GameHero(game: g, left: left, right: right, note: seriesNote,
                      embedded: embedded, dismiss: dismiss)
             Group {
                 DetailTabs(tabs: tabs, selection: Binding(get: { current }, set: { tab = $0 }))
@@ -212,7 +230,7 @@ private struct GameDetailContent: View {
                     LineupsCard(league: league, summary: summary, left: left, right: right, home: g.home, away: g.away)
                 case .summary:
                     LineScoreCard(league: league, left: left, right: right, comp: comp, hitsErrors: true)
-                    if league.family == .baseball { DecisionsCard(league: league, comp: comp) }
+                    if league.family == .baseball { MLBSummaryCards(league: league, game: g, comp: comp) }
                     if league.family == .basketball { GameLeadersCard(league: league, summary: summary, left: left, right: right) }
                     GameInfoCard(summary: summary)
                 case .box:
@@ -253,7 +271,11 @@ private struct BBLGameDetailContent: View {
         VStack(spacing: 14) {
             GameHero(game: g, left: left, right: right, note: g.note, embedded: embedded, dismiss: dismiss)
             Group {
-                DetailTabs(tabs: [.summary, .box, .stats], selection: $tab)
+                DetailTabs(tabs: detail.plays.isEmpty ? [.summary, .box, .stats] : [.summary, .plays, .box, .stats], selection: $tab)
+                if tab == .plays {
+                    PlaysSection(league: league, left: left, right: right, plays: detail.plays, points: detail.winProb,
+                                 live: g.state == .live, estimated: true)
+                }
                 if tab == .summary {
                     LineScoreCard(league: league, left: left, right: right, comp: J(nil), hitsErrors: false)
                 }
@@ -339,7 +361,7 @@ private struct LineScoreCard: View {
             VStack(alignment: .leading, spacing: 8) {
                 CardTitle(isBase ? "Line Score" : "Scoring")
                 ViewThatFits(in: .horizontal) {
-                    table(n: n, isBase: isBase, cell: isBase ? 22 : 30)
+                    table(n: n, isBase: isBase, cell: isBase ? 21 : 30)
                     ScrollView(.horizontal, showsIndicators: false) { table(n: n, isBase: isBase, cell: 24, flexible: false) }
                 }
             }
@@ -351,7 +373,7 @@ private struct LineScoreCard: View {
         let font: Font = isBase ? .footnote : .subheadline
         return VStack(spacing: 10) {
             HStack(spacing: 0) {
-                Color.clear.frame(width: 58, height: 1)
+                Color.clear.frame(width: isBase ? 52 : 58, height: 1)
                 ForEach(0..<n, id: \.self) { i in cellText(label(i), width: cell, flexible: flexible) }
                 cellText(isBase ? "R" : "T", width: cell + 6, flexible: flexible)
                 if isBase {
@@ -368,7 +390,7 @@ private struct LineScoreCard: View {
                         LogoView(url: s.logo, fallback: s.abbr, size: 20)
                         Text(s.abbr).fontWeight(.bold).lineLimit(1).minimumScaleFactor(0.7)
                     }
-                    .frame(width: 58, alignment: .leading)
+                    .frame(width: isBase ? 52 : 58, alignment: .leading)
                     ForEach(0..<n, id: \.self) { i in
                         cellText(i < s.linescores.count ? s.linescores[i] : "", width: cell, flexible: flexible)
                     }
@@ -1016,6 +1038,103 @@ private struct GameLeadersCard: View {
     }
 }
 
+/// MLB: decisions with the pitchers' record and ERA after the game (and the save), plus
+/// the top performers. Both come from ESPN's scoreboard (the game summary lacks them).
+private struct MLBSummaryCards: View {
+    let league: League
+    let game: Game
+    let comp: J
+
+    var body: some View {
+        Loader(id: "mlb-extra-\(game.id)", load: { () async throws -> J in
+            let f = DateFormatter()
+            f.dateFormat = "yyyyMMdd"
+            f.timeZone = TimeZone(identifier: "America/New_York")
+            for d in [game.date, game.date.addingTimeInterval(-86_400)] {
+                guard let url = URL(string: "\(ESPN.site)/baseball/mlb/scoreboard?dates=\(f.string(from: d))") else { continue }
+                let j = try await HTTP.shared.json(url, maxAge: game.state == .post ? 86_400 : 60)
+                if let e = j["events"].array.first(where: { $0["id"].str == game.id }) { return e["competitions"][0] }
+            }
+            return J(nil)
+        }) { sc in
+            VStack(spacing: 14) {
+                decisions(sc["status"]["featuredAthletes"].array.isEmpty ? comp["status"]["featuredAthletes"].array : sc["status"]["featuredAthletes"].array)
+                performers(sc["leaders"].array.first { $0["name"].str == "MLBRating" }?["leaders"].array ?? [])
+            }
+        }
+    }
+
+    private func stat(_ f: J, _ name: String) -> String? {
+        f["statistics"].array.first { $0["name"].str == name }?["displayValue"].string
+    }
+
+    @ViewBuilder private func decisions(_ fa: [J]) -> some View {
+        if !fa.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                CardTitle("Decisions")
+                ForEach(Array(fa.enumerated()), id: \.offset) { _, f in
+                    let role = f["name"].str
+                    let tag = role == "winningPitcher" ? "W" : role == "losingPitcher" ? "L" : role == "savingPitcher" ? "S" : ""
+                    let record: String = {
+                        if role == "savingPitcher" { return [stat(f, "saves").map { "\($0) SV" }, stat(f, "ERA").map { "\($0) ERA" }].compactMap { $0 }.joined(separator: ", ") }
+                        let wl = [stat(f, "wins"), stat(f, "losses")].compactMap { $0 }.joined(separator: "-")
+                        return [wl.isEmpty ? nil : wl, stat(f, "ERA").map { "\($0) ERA" }].compactMap { $0 }.joined(separator: ", ")
+                    }()
+                    NavigationLink(value: Route.player(leagueId: league.id, playerId: f["athlete"]["id"].str)) {
+                        HStack(spacing: 12) {
+                            CachedImage(url: f["athlete"]["headshot"].url ?? f["athlete"]["headshot"]["href"].url) { $0.resizable().scaledToFill() } placeholder: { Theme.card2 }
+                                .frame(width: 38, height: 38).background(Theme.card2).clipShape(Circle())
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(f["athlete"]["displayName"].str).font(.subheadline.weight(.bold))
+                                Text(f["displayName"].str + (f["team"]["abbreviation"].string.map { " · \($0)" } ?? ""))
+                                    .font(.caption).foregroundStyle(Theme.secondary)
+                            }
+                            Spacer()
+                            VStack(alignment: .trailing, spacing: 1) {
+                                Text(tag).font(.subheadline.weight(.heavy))
+                                    .foregroundStyle(tag == "W" ? Theme.win : tag == "L" ? Theme.live : .yellow)
+                                Text(record).font(.caption).monospacedDigit().foregroundStyle(Theme.secondary)
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .card()
+        }
+    }
+
+    @ViewBuilder private func performers(_ list: [J]) -> some View {
+        if !list.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                CardTitle("Top performers")
+                ForEach(Array(list.prefix(2).enumerated()), id: \.offset) { _, l in
+                    let a = l["athlete"]
+                    NavigationLink(value: Route.player(leagueId: league.id, playerId: a["id"].str)) {
+                        HStack(spacing: 12) {
+                            CachedImage(url: a["headshot"].url ?? a["headshot"]["href"].url) { $0.resizable().scaledToFill() } placeholder: { Theme.card2 }
+                                .frame(width: 38, height: 38).background(Theme.card2).clipShape(Circle())
+                            VStack(alignment: .leading, spacing: 1) {
+                                HStack(spacing: 4) {
+                                    Text(a["displayName"].str).font(.subheadline.weight(.bold))
+                                    if let pos = a["position"]["abbreviation"].string { Text(pos).font(.caption2).foregroundStyle(Theme.secondary) }
+                                }
+                                Text(l["displayValue"].str).font(.caption).foregroundStyle(Theme.secondary)
+                            }
+                            Spacer()
+                            let teamId = a["team"]["id"].string ?? l["team"]["id"].str
+                            let logo = [game.home, game.away].first { $0.id == teamId }?.logo
+                            LogoView(url: logo, fallback: "", size: 22)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .card()
+        }
+    }
+}
+
 private struct DecisionsCard: View {
     let league: League
     let comp: J
@@ -1114,14 +1233,19 @@ private struct RugbyLineupsCard: View {
                 if n == 16 {
                     Text("REPLACEMENTS").font(.system(size: 9, weight: .bold)).foregroundStyle(Theme.secondary).padding(.top, 8)
                 }
-                HStack(spacing: 6) {
-                    Text(p["jersey"].str).foregroundStyle(Theme.secondary).frame(width: 20, alignment: .trailing)
-                    Text(p["athlete"]["shortName"].string ?? p["athlete"]["displayName"].str)
-                        .lineLimit(1).minimumScaleFactor(0.8)
-                        .foregroundStyle(n > 15 ? Theme.secondary : .white)
+                NavigationLink(value: Route.player(leagueId: "prem", playerId: p["athlete"]["id"].str)) {
+                    HStack(spacing: 6) {
+                        Text(p["jersey"].str).foregroundStyle(Theme.secondary).frame(width: 20, alignment: .trailing)
+                        Text(p["athlete"]["shortName"].string ?? p["athlete"]["displayName"].str)
+                            .lineLimit(1).minimumScaleFactor(0.8)
+                            .foregroundStyle(n > 15 ? Theme.secondary : .white)
+                    }
+                    .font(.caption)
+                    .padding(.vertical, 4)
+                    .contentShape(Rectangle())
                 }
-                .font(.caption)
-                .padding(.vertical, 4)
+                .buttonStyle(.plain)
+                .disabled(p["athlete"]["id"].str.isEmpty)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

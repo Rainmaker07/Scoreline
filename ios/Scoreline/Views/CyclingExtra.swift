@@ -500,6 +500,63 @@ enum LogoPrep {
         }
         return PreparedLogo(image: out, needsTile: needsTile)
     }
+
+    /// A logo on a plain background (white box, black box): that background colour made
+    /// transparent, flood-filled from the corners. Logos with transparency are returned as-is.
+    static func knockOut(_ img: UIImage, key: String) async -> UIImage {
+        if let hit = knocked[key] { return hit }
+        let result = await Task.detached(priority: .utility) { () -> UIImage in
+            guard let cg = img.cgImage else { return img }
+            let w = cg.width, h = cg.height
+            guard w > 4, h > 4, w * h < 4_000_000,
+                  let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
+                                      space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue),
+                  let raw = ctx.data else { return img }
+            ctx.draw(cg, in: CGRect(x: 0, y: 0, width: w, height: h))
+            let px = raw.bindMemory(to: UInt8.self, capacity: w * h * 4)
+            func at(_ x: Int, _ y: Int) -> Int { (y * w + x) * 4 }
+            // Already transparent at a corner: nothing to do.
+            if px[at(0, 0) + 3] < 250 { return img }
+            let bg = (Int(px[0]), Int(px[1]), Int(px[2]))
+            func close(_ i: Int) -> Bool {
+                abs(Int(px[i]) - bg.0) + abs(Int(px[i + 1]) - bg.1) + abs(Int(px[i + 2]) - bg.2) < 60 && px[i + 3] > 200
+            }
+            var seen = [Bool](repeating: false, count: w * h)
+            var stack = [(0, 0), (w - 1, 0), (0, h - 1), (w - 1, h - 1)]
+            while let point = stack.popLast() {
+                let x = point.0, y = point.1
+                guard x >= 0, y >= 0, x < w, y < h, !seen[y * w + x] else { continue }
+                seen[y * w + x] = true
+                let i = at(x, y)
+                guard close(i) else { continue }
+                px[i] = 0; px[i + 1] = 0; px[i + 2] = 0; px[i + 3] = 0
+                stack.append((x + 1, y)); stack.append((x - 1, y)); stack.append((x, y + 1)); stack.append((x, y - 1))
+            }
+            guard let out = ctx.makeImage() else { return img }
+            return UIImage(cgImage: out, scale: img.scale, orientation: img.imageOrientation)
+        }.value
+        knocked[key] = result
+        return result
+    }
+    private static let knocked = LockedCache<String, UIImage>()
+}
+
+/// Competition logo with its plain background removed (e.g. ESPN's World Cup logo).
+struct CleanLogo: View {
+    let url: URL?
+    var size: CGFloat = 16
+    @State private var image: UIImage?
+
+    var body: some View {
+        Group {
+            if let image { Image(uiImage: image).resizable().scaledToFit() } else { Color.clear }
+        }
+        .frame(width: size, height: size)
+        .task(id: url) {
+            guard let url, let img = await ImageStore.shared.image(url) else { return }
+            image = await LogoPrep.knockOut(img, key: url.absoluteString)
+        }
+    }
 }
 
 enum RaceLogos {

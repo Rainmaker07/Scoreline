@@ -54,7 +54,10 @@ struct StatTableView: View {
                         linked(i) {
                             HStack(spacing: 5) {
                                 if i < table.rowLogos.count {
-                                    if let logo = table.rowLogos[i] {
+                                    if let logo = table.rowLogos[i], logo.absoluteString.contains("leaguelogos/soccer/500/4.png") {
+                                        // ESPN's World Cup logo has a white box: shown with it removed.
+                                        CleanLogo(url: logo, size: 16)
+                                    } else if let logo = table.rowLogos[i] {
                                         LogoView(url: logo, fallback: "", size: 16)
                                     } else {
                                         Image(systemName: "soccerball").font(.system(size: 12)).foregroundStyle(Theme.secondary)
