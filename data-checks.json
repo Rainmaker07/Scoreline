@@ -1,0 +1,485 @@
+[
+  {
+    "detail" : "2 groups, 30 teams",
+    "group" : "ESPN",
+    "name" : "NBA standings",
+    "ok" : true,
+    "seconds" : 0.5851680040359497
+  },
+  {
+    "detail" : "22 games in the last 3 days",
+    "group" : "ESPN",
+    "name" : "NBA scoreboard",
+    "ok" : true,
+    "seconds" : 0.6085519790649414
+  },
+  {
+    "detail" : "2 groups, 30 teams",
+    "group" : "ESPN",
+    "name" : "MLB standings",
+    "ok" : true,
+    "seconds" : 0.6186660528182983
+  },
+  {
+    "detail" : "0 games in the last 3 days",
+    "group" : "ESPN",
+    "name" : "MLB scoreboard",
+    "ok" : true,
+    "seconds" : 0.586948037147522
+  },
+  {
+    "detail" : "1 groups, 20 teams",
+    "group" : "ESPN",
+    "name" : "Premier League standings",
+    "ok" : true,
+    "seconds" : 0.09762394428253174
+  },
+  {
+    "detail" : "1 games in the last 3 days",
+    "group" : "ESPN",
+    "name" : "Premier League scoreboard",
+    "ok" : true,
+    "seconds" : 0.0946969985961914
+  },
+  {
+    "detail" : "1 groups, 18 teams",
+    "group" : "ESPN",
+    "name" : "Bundesliga standings",
+    "ok" : true,
+    "seconds" : 0.09371602535247803
+  },
+  {
+    "detail" : "0 games in the last 3 days",
+    "group" : "ESPN",
+    "name" : "Bundesliga scoreboard",
+    "ok" : true,
+    "seconds" : 0.06626904010772705
+  },
+  {
+    "detail" : "1 groups, 18 teams",
+    "group" : "ESPN",
+    "name" : "2. Bundesliga standings",
+    "ok" : true,
+    "seconds" : 0.0989459753036499
+  },
+  {
+    "detail" : "0 games in the last 3 days",
+    "group" : "ESPN",
+    "name" : "2. Bundesliga scoreboard",
+    "ok" : true,
+    "seconds" : 0.06493902206420898
+  },
+  {
+    "detail" : "1 groups, 36 teams",
+    "group" : "ESPN",
+    "name" : "Champions League standings",
+    "ok" : true,
+    "seconds" : 0.12111198902130127
+  },
+  {
+    "detail" : "18 games in the last 3 days",
+    "group" : "ESPN",
+    "name" : "Champions League scoreboard",
+    "ok" : true,
+    "seconds" : 0.07099103927612305
+  },
+  {
+    "detail" : "1 groups, 36 teams",
+    "group" : "ESPN",
+    "name" : "Europa League standings",
+    "ok" : true,
+    "seconds" : 0.10087597370147705
+  },
+  {
+    "detail" : "0 games in the last 3 days",
+    "group" : "ESPN",
+    "name" : "Europa League scoreboard",
+    "ok" : true,
+    "seconds" : 0.05456197261810303
+  },
+  {
+    "detail" : "1 groups, 36 teams",
+    "group" : "ESPN",
+    "name" : "Conference League standings",
+    "ok" : true,
+    "seconds" : 0.0807729959487915
+  },
+  {
+    "detail" : "0 games in the last 3 days",
+    "group" : "ESPN",
+    "name" : "Conference League scoreboard",
+    "ok" : true,
+    "seconds" : 0.10661602020263672
+  },
+  {
+    "detail" : "6 rounds",
+    "group" : "ESPN",
+    "name" : "DFB-Pokal rounds",
+    "ok" : true,
+    "seconds" : 0.10327303409576416
+  },
+  {
+    "detail" : "0 games in the last 3 days",
+    "group" : "ESPN",
+    "name" : "DFB-Pokal scoreboard",
+    "ok" : true,
+    "seconds" : 0.09407401084899902
+  },
+  {
+    "detail" : "8 rounds",
+    "group" : "ESPN",
+    "name" : "FA Cup rounds",
+    "ok" : true,
+    "seconds" : 0.14755797386169434
+  },
+  {
+    "detail" : "0 games in the last 3 days",
+    "group" : "ESPN",
+    "name" : "FA Cup scoreboard",
+    "ok" : true,
+    "seconds" : 0.054296016693115234
+  },
+  {
+    "detail" : "1 groups, 10 teams",
+    "group" : "ESPN",
+    "name" : "Premiership standings",
+    "ok" : true,
+    "seconds" : 0.17847192287445068
+  },
+  {
+    "detail" : "0 games in the last 3 days",
+    "group" : "ESPN",
+    "name" : "Premiership scoreboard",
+    "ok" : true,
+    "seconds" : 0.1729590892791748
+  },
+  {
+    "detail" : "39 finished games",
+    "group" : "ESPN",
+    "name" : "NBA results have scores",
+    "ok" : true,
+    "seconds" : 0.1808910369873047
+  },
+  {
+    "detail" : "10 finished games",
+    "group" : "ESPN",
+    "name" : "Football results have scores",
+    "ok" : true,
+    "seconds" : 0.18066799640655518
+  },
+  {
+    "detail" : "GS @ MEM: box score OK",
+    "group" : "ESPN",
+    "name" : "NBA game summary",
+    "ok" : true,
+    "seconds" : 0.23003804683685303
+  },
+  {
+    "detail" : "MNC v FUL: lineups OK",
+    "group" : "ESPN",
+    "name" : "Football match summary",
+    "ok" : true,
+    "seconds" : 0.29975998401641846
+  },
+  {
+    "detail" : "16 categories",
+    "group" : "ESPN",
+    "name" : "NBA stat leaders",
+    "ok" : true,
+    "seconds" : 0.5399060249328613
+  },
+  {
+    "detail" : "19 categories",
+    "group" : "ESPN",
+    "name" : "MLB stat leaders",
+    "ok" : true,
+    "seconds" : 0.5320500135421753
+  },
+  {
+    "detail" : "2 categories",
+    "group" : "ESPN",
+    "name" : "Premier League stat leaders",
+    "ok" : true,
+    "seconds" : 0.10177195072174072
+  },
+  {
+    "detail" : "2 categories",
+    "group" : "ESPN",
+    "name" : "Bundesliga stat leaders",
+    "ok" : true,
+    "seconds" : 0.10675299167633057
+  },
+  {
+    "detail" : "19 categories, AVG leader Yordan Alvarez",
+    "group" : "ESPN",
+    "name" : "MLB AL leaders",
+    "ok" : true,
+    "seconds" : 0.3611840009689331
+  },
+  {
+    "detail" : "19 categories, AVG leader Gabriel Moreno",
+    "group" : "ESPN",
+    "name" : "MLB NL leaders",
+    "ok" : true,
+    "seconds" : 0.4201200008392334
+  },
+  {
+    "detail" : "6 categories",
+    "group" : "ESPN",
+    "name" : "MLB fielding leaders",
+    "ok" : true,
+    "seconds" : 0.18009591102600098
+  },
+  {
+    "detail" : "488 plays",
+    "group" : "ESPN",
+    "name" : "NBA play-by-play + win probability",
+    "ok" : true,
+    "seconds" : 0.20963597297668457
+  },
+  {
+    "detail" : "predictor yes, odds no, injuries 2",
+    "group" : "ESPN",
+    "name" : "NBA preview",
+    "ok" : true,
+    "seconds" : 0.2910820245742798
+  },
+  {
+    "detail" : "SAB v BAR: xG 1.19-4.06, 7 events",
+    "group" : "FotMob",
+    "name" : "Champions League match data",
+    "ok" : true,
+    "seconds" : 0.6470999717712402
+  },
+  {
+    "detail" : "BRE v EVE: xG 2.57-0.23, 25 shots",
+    "group" : "FotMob",
+    "name" : "Match data (xG, shots, ratings)",
+    "ok" : true,
+    "seconds" : 0.5523580312728882
+  },
+  {
+    "detail" : "Milwaukee Bucks: 80 games, 18 players",
+    "group" : "ESPN",
+    "name" : "Team page",
+    "ok" : true,
+    "seconds" : 0.23686790466308594
+  },
+  {
+    "detail" : "Arsenal: 46 games",
+    "group" : "ESPN",
+    "name" : "Football team across competitions",
+    "ok" : true,
+    "seconds" : 0.5598150491714478
+  },
+  {
+    "detail" : "Luka Doncic",
+    "group" : "ESPN",
+    "name" : "Player page",
+    "ok" : true,
+    "seconds" : 0.1896040439605713
+  },
+  {
+    "detail" : "1 results",
+    "group" : "ESPN",
+    "name" : "Search",
+    "ok" : true,
+    "seconds" : 0.06054401397705078
+  },
+  {
+    "detail" : "6 groups",
+    "group" : "ESPN",
+    "name" : "NBA Cup",
+    "ok" : true,
+    "seconds" : 1.777413010597229
+  },
+  {
+    "detail" : "18 teams",
+    "group" : "BBL",
+    "name" : "Standings",
+    "ok" : true,
+    "seconds" : 0.42795801162719727
+  },
+  {
+    "detail" : "18 games",
+    "group" : "BBL",
+    "name" : "Games",
+    "ok" : true,
+    "seconds" : 0.03936898708343506
+  },
+  {
+    "detail" : "10 categories, top scorer Spencer Reaves",
+    "group" : "BBL",
+    "name" : "Stat leaders",
+    "ok" : true,
+    "seconds" : 1.5830410718917847
+  },
+  {
+    "detail" : "BON v ULM",
+    "group" : "BBL",
+    "name" : "Game detail",
+    "ok" : true,
+    "seconds" : 0.895706057548523
+  },
+  {
+    "detail" : "62 tournaments",
+    "group" : "Tennis",
+    "name" : "ATP season",
+    "ok" : true,
+    "seconds" : 0.837082028388977
+  },
+  {
+    "detail" : "US Open: 127 matches",
+    "group" : "Tennis",
+    "name" : "Tournament draw",
+    "ok" : true,
+    "seconds" : 0.6123709678649902
+  },
+  {
+    "detail" : "Race to Turin: 20 players, leader Alexander Zverev 9,350, 8 marked Q",
+    "group" : "Tennis",
+    "name" : "Race to the Finals",
+    "ok" : true,
+    "seconds" : 3.38641095161438
+  },
+  {
+    "detail" : "150 players",
+    "group" : "Tennis",
+    "name" : "Rankings",
+    "ok" : true,
+    "seconds" : 0.07697701454162598
+  },
+  {
+    "detail" : "39 of 100 have photos: ESPN 39, ATP Tour 0, SofaScore 0 || none: Ben Shelton, Arthur Fils, Flavio Cobolli, Rafael Jodar, Jiri Lehecka, Jakub Mensik, Francisco Cerundolo, Luciano Darderi, Learner Tien, Valentin Vacherot, Alexander Blockx, Tomas Martin Etcheverry, Alejandro Tabilo, Arthur Fery, Ignacio Buse, Luca Van Assche, Alex Michelsen, Matteo Arnaldi, Nuno Borges, Daniel Merida, Zizou Bergs, Quentin Halys, Joao Fonseca, Thiago Agustin Tirante, Arthur Gea, Mariano Navone, Juan Manuel Cerundolo, Raphael Collignon, Jaime Faria, Rinky Hijikata",
+    "group" : "Diagnostics",
+    "name" : "Tennis headshots",
+    "ok" : true,
+    "seconds" : 28.506143927574158
+  },
+  {
+    "detail" : "2026: Europe 13 – World 5",
+    "group" : "Tennis",
+    "name" : "Laver Cup",
+    "ok" : true,
+    "seconds" : 0.19311892986297607
+  },
+  {
+    "detail" : "2025: 7 ties",
+    "group" : "Tennis",
+    "name" : "Davis Cup",
+    "ok" : true,
+    "seconds" : 0.18932604789733887
+  },
+  {
+    "detail" : "Giro 21, Tour 21, Vuelta 21",
+    "group" : "Cycling",
+    "name" : "Grand Tours",
+    "ok" : true,
+    "seconds" : 10.41344690322876
+  },
+  {
+    "detail" : "36 races",
+    "group" : "Cycling",
+    "name" : "WorldTour calendar",
+    "ok" : true,
+    "seconds" : 0.19983303546905518
+  },
+  {
+    "detail" : "Il Lombardia: winner Paul Seixas",
+    "group" : "Cycling",
+    "name" : "One-day race",
+    "ok" : true,
+    "seconds" : 0.611780047416687
+  },
+  {
+    "detail" : "2 teams, 4 win categories",
+    "group" : "Cycling",
+    "name" : "Rider page",
+    "ok" : true,
+    "seconds" : 3.0030059814453125
+  },
+  {
+    "detail" : "UAE Team Emirates XRG",
+    "group" : "Cycling",
+    "name" : "Team page",
+    "ok" : true,
+    "seconds" : 3.284983992576599
+  },
+  {
+    "detail" : "3 shortened, 4 in smaller text || shortened: Dynamo Dresden → D. Dresden, Inter D'Escaldes → I. D'Escaldes, Slovan Bratislava → S. Bratislava || smaller: 1. FC Nürnberg, Ararat-Armenia, Dinamo Zagreb, Sint-Truidense",
+    "group" : "Diagnostics",
+    "name" : "Standings names",
+    "ok" : true,
+    "seconds" : 0.06632697582244873
+  },
+  {
+    "detail" : "top tries Christian Wade 6, top points Finn Russell 45",
+    "group" : "Rugby",
+    "name" : "Season stats",
+    "ok" : true,
+    "seconds" : 0.8065700531005859
+  },
+  {
+    "detail" : "Leicester Tigers: 39 || Gloucester Rugby: 37 || Northampton Saints: 40 || Saracens: 42 || Bath Rugby: 50 || Bristol Rugby: 39 || Harlequins: 44 || Sale Sharks: 36 || Exeter Chiefs: 41 || Newcastle Falcons: 43",
+    "group" : "Diagnostics",
+    "name" : "Rugby squads",
+    "ok" : true,
+    "seconds" : 9.315072059631348
+  },
+  {
+    "detail" : "27 of 60 have logos || Bank of China Hong Kong Tennis Open: en ok, images [330px-Victoria_Park_Overview_201810_(cropped).jpg] {266 img (8 in lead), box 10128 chars: <img resource=\".\/File:Tennisball_current_event.svg\" src=\"\/\/thumb.wikimedia.org\/wikipedia\/commons\/thumb\/b\/b1\/Tennisball_current_event.svg\/40px-Tennisball_current_event.svg.png?utm_source=en.wikipedia.org&amp;utm_campaign=pars <img resource=\".\/File:Flag_of_Kazakhstan.svg\" src=\"\/\/thumb.wikimedia.org\/wikipedia\/commons\/thumb\/d\/d3\/Flag_of_Kazakhstan.svg\/40px-Flag_of_Kazakhstan.svg.png?utm_source=en.wikipedia.org&amp;utm_campaign=parser&amp;utm_content}; de 'ATP Hongkong' box true, images []; de 'Bank of China Hong Kong Tennis Open 2026' box true, images []; de 'Bank of China Hong Kong Tennis Open 2026\/Qualifikation' box true, images [] || Nexo Dallas Open: en ok, images [] {1 img (0 in lead), box 0 chars: <img resource=\".\/File:Disambig_gray.svg\" src=\"\/\/thumb.wikimedia.org\/wikipedia\/en\/thumb\/5\/5f\/Disambig_gray.svg\/40px-Disambig_gray.svg.png?utm_source=en.wikipedia.org&amp;utm_campaign=parser&amp;utm_content=thumbnail\" decoding}; de 'ATP Dallas' box true, images [250px-Ford_Center_at_the_Star_-_May_2018_-_Exterior.jpg]; de 'ATP Challenger Dallas' box true, images []; de 'Dallas Open 2025' box true, images [] || Hamburg Open: en ok, images [] {808 img (6 in lead), box 10929 chars: <img resource=\".\/File:Flag_of_Peru.svg\" src=\"\/\/thumb.wikimedia.org\/wikipedia\/commons\/thumb\/c\/cf\/Flag_of_Peru.svg\/40px-Flag_of_Peru.svg.png?utm_source=en.wikipedia.org&amp;utm_campaign=parser&amp;utm_content=thumbnail\" decodi <img resource=\".\/File:Flag_of_Germany.svg\" src=\"\/\/thumb.wikimedia.org\/wikipedia\/en\/thumb\/b\/ba\/Flag_of_Germany.svg\/40px-Flag_of_Germany.svg.png?utm_source=en.wikipedia.org&amp;utm_campaign=parser&amp;utm_content=thumbnail\" de}; de search status(429) || missing: Bank of China Hong Kong Tennis Open, Nexo Dallas Open, Hamburg Open, Boss Open, Libéma Open, Terra Wortmann Open, HSBC Championships, Vanda Pharmaceuticals Mallorca Championships, Lexus Eastbourne Open, Nordea Open, EFG Swiss Open Gstaad, Plava Laguna Croatia Open Umag, Generali Open, Millennium Estoril Open, Mubadala Citi DC Open, Mifel Tennis Open, Omnium Banque Nationale, Cincinnati Open, Winston-Salem Open, Chengdu Open, Hangzhou Open, Kinoshita Group Japan Open Tennis Championships, China Open, Rolex Shanghai Masters, BNP Paribas Fortis European Open, Almaty Open, Grand Prix Auvergne-Rhône-Alpes, Erste Bank Open, Swiss Indoors Basel, Rolex Paris Masters, Bybit Stockholm Open, Nitto ATP Finals, Next Gen ATP Finals",
+    "group" : "Diagnostics",
+    "name" : "Tennis logos",
+    "ok" : true,
+    "seconds" : 31.245515942573547
+  },
+  {
+    "detail" : "30 of 36 have logos || \/ Renewi Tour: en status(429); de search status(429) || Bretagne Classic: en status(429); de search status(429) || Grand Prix Cycliste de Québec: en status(429); de search status(429) || missing: \/ Renewi Tour, Bretagne Classic, Grand Prix Cycliste de Québec, Grand Prix Cycliste de Montréal, Il Lombardia, Tour of Guangxi",
+    "group" : "Diagnostics",
+    "name" : "Race logos",
+    "ok" : true,
+    "seconds" : 20.0521320104599
+  },
+  {
+    "detail" : "9 of 11 complete || OK Lidl–Trek -> 'Lidl–Trek (men's team)' logo=250px-Lidl–Trek_logo.png roster=true wins=true || OK UAE Team Emirates XRG -> 'UAE Team Emirates XRG' logo=UAE_Team_Emirates.png roster=true wins=true || OK Red Bull–Bora–Hansgrohe -> 'Red Bull–Bora–Hansgrohe' logo=330px-Bora-hansgrohe.svg.png roster=true wins=true || OK Decathlon CMA CGM -> 'Decathlon CMA CGM Team' logo=250px-Decathlon_CMA_CGM_logo.png roster=true wins=true || OK Visma–Lease a Bike -> 'Visma–Lease a Bike (men's team)' logo=250px-Visma-Lease_a_Bike_logo.svg.png roster=true wins=true || OK EF Education–EasyPost -> 'EF Education–EasyPost' logo=250px-EF_Education-EasyPost_Logo.svg.png roster=true wins=true || OK Netcompany INEOS -> 'Netcompany–Ineos' logo=250px-Netcompany_INEOS_logo.svg.png roster=true wins=true || OK Team Bahrain Victorious -> 'Team Bahrain Victorious' logo=250px-Team_Bahrain_Victorious_Logo.png roster=true wins=true || OK Team TotalEnergies -> 'Team TotalEnergies' logo=250px-Team_TotalEnergies_logo.png roster=true wins=true || MISSING Pinarello–Q36.5 Pro Cycling Team -> 'Pinarello–Q36.5 Pro Cycling Team' logo=- roster=true wins=true [article 'Pinarello–Q36.5 Pro Cycling Team'; images 250px-2025_ToBM_Team_Q36-5_Pro_Cycling.JPG {43 img (2 in lead), box 4994 chars: <img resource=\".\/File:2025_ToBM_Team_Q36-5_Pro_Cycling.JPG\" src=\"\/\/thumb.wikimedia.org\/wikipedia\/commons\/thumb\/5\/56\/2025_ToBM_Team_Q36-5_Pro_Cycling.JPG\/250px-2025_ToBM_Team_Q36-5_Pro_Cycling.JPG?utm_source=en.wikipedia.org& <img resource=\".\/File:Cycling_current_event.svg\" src=\"\/\/thumb.wikimedia.org\/wikipedia\/commons\/thumb\/9\/9c\/Cycling_current_event.svg\/40px-Cycling_current_event.svg.png?utm_source=en.wikipedia.org&amp;utm_campaign=parser&amp;ut}; '2025 Q36.5 Pro Cycling Team season': 10 tables, roster true, wins true] || MISSING Movistar Team -> 'Movistar Team (men's team)' logo=- roster=false wins=false [article 'Movistar Team (men's team)'; article not loaded]",
+    "group" : "Diagnostics",
+    "name" : "Cycling teams",
+    "ok" : true,
+    "seconds" : 14.344004034996033
+  },
+  {
+    "detail" : "Server returned 429",
+    "group" : "Cycling",
+    "name" : "UCI World Tour ranking",
+    "ok" : false,
+    "seconds" : 0.29578399658203125
+  },
+  {
+    "detail" : "Server returned 429",
+    "group" : "Cycling",
+    "name" : "Team lists",
+    "ok" : false,
+    "seconds" : 0.10269594192504883
+  },
+  {
+    "detail" : "Tadej Pogačar 15 wins",
+    "group" : "Cycling",
+    "name" : "Win leaders",
+    "ok" : true,
+    "seconds" : 0.9463459253311157
+  },
+  {
+    "detail" : "OK",
+    "group" : "Images",
+    "name" : "FotMob player photo",
+    "ok" : true,
+    "seconds" : 0.7111170291900635
+  },
+  {
+    "detail" : "10 logos",
+    "group" : "Images",
+    "name" : "Competition logos",
+    "ok" : true,
+    "seconds" : 0.424422025680542
+  }
+]
