@@ -68,7 +68,7 @@ func tableName(_ name: String) -> String {
     let map: [String: String] = [
         "Wolverhampton": "Wolves", "Wolverhampton Wanderers": "Wolves", "Nottingham Forest": "Forest", "Nott'm Forest": "Forest",
         "Kaiserslautern": "K'lautern", "Mönchengladbach": "Gladbach", "Bor. Mönchengladbach": "Gladbach",
-        "Greuther Furth": "Fürth", "Greuther Fürth": "Fürth", "E Braunschweig": "Braunschweig", "Eintracht Braunschweig": "Braunschweig",
+        "Greuther Furth": "Fürth", "Greuther Fürth": "Fürth", "E Braunschweig": "Braunschweig", "Eintracht Braunschweig": "Braunschweig", "TSV Eintracht Braunschweig": "Braunschweig",
         "Leicester Tigers": "Leicester", "Gloucester Rugby": "Gloucester", "Harlequins": "Quins", "Northampton Saints": "Northampton",
         "Sale Sharks": "Sale", "Exeter Chiefs": "Exeter", "Newcastle Red Bulls": "Newcastle", "Newcastle Falcons": "Newcastle",
         "Bristol Bears": "Bristol", "Bath Rugby": "Bath", "Bristol Rugby": "Bristol", "Saracens": "Saracens",

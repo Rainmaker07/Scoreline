@@ -226,14 +226,13 @@ private struct WinProbabilityCard: View {
 
     /// First point of each period after the first (faint marks with labels).
     private var periodStarts: [(index: Int, label: String)] {
-        var out: [(Int, String)] = []
-        var last: Int?
+        var first: [Int: (Int, String)] = [:]
         for p in points {
-            guard let play = p.play else { continue }
-            if let l = last, play.period != l { out.append((p.id, play.periodShort)) }
-            last = play.period
+            guard let play = p.play, play.period > 1 else { continue }
+            if let f = first[play.period], f.0 <= p.id { continue }
+            first[play.period] = (p.id, play.periodShort)
         }
-        return out
+        return first.keys.sorted().compactMap { first[$0] }.map { (index: $0.0, label: $0.1) }
     }
 
     var body: some View {
@@ -308,6 +307,7 @@ private struct WinProbabilityCard: View {
                 }
             }
             .frame(height: 150)
+            .padding(.bottom, 14)
             Text("Drag along the chart to follow the game. Dots mark the key moments.")
                 .font(.caption2).foregroundStyle(Theme.tertiary)
         }

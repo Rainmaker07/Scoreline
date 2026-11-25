@@ -591,7 +591,7 @@ struct BoxScoreCards: View {
                                 headshot: a["athlete"]["headshot"]["href"].url
                             )
                         },
-                        totals: grp["totals"].array.isEmpty ? [] : pick(grp["totals"].array.map(\.str)),
+                        totals: grp["totals"].array.isEmpty ? [] : pick(Self.alignTotals(grp["totals"].array.map(\.str), labels: labels)),
                         sectionTitles: sections,
                         leaderColumns: Self.leaderColumns[kind] ?? []
                     )
@@ -604,6 +604,12 @@ struct BoxScoreCards: View {
         var out = preferred.compactMap { labels.firstIndex(of: $0) }
         for i in labels.indices where !out.contains(i) && !dropped.contains(labels[i]) { out.append(i) }
         return out
+    }
+
+    /// ESPN's team totals sometimes leave out the minutes column: pad so values line up.
+    static func alignTotals(_ totals: [String], labels: [String]) -> [String] {
+        guard totals.count < labels.count else { return totals }
+        return Array(repeating: "", count: labels.count - totals.count) + totals
     }
 
     static func dnpText(_ reason: String?) -> String {
