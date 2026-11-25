@@ -24,7 +24,7 @@ struct GameDetailView: View {
             }
         }
         .scrollIndicators(.hidden)
-        .background(Theme.bg.ignoresSafeArea())
+        .background(PageBackground())
         .toolbar(embedded ? .visible : .hidden, for: .navigationBar)
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -40,8 +40,8 @@ struct GameHero: View {
     let dismiss: () -> Void
 
     var body: some View {
-        let lc = Color.visibleTint(left.tintHex) ?? Color(white: 0.25)
-        let rc = Color.visibleTint(right.tintHex) ?? Color(white: 0.25)
+        let lc = Color.visibleTint(left.tintHex) ?? Color.white.opacity(0.15)
+        let rc = Color.visibleTint(right.tintHex) ?? Color.white.opacity(0.15)
         let ln = Double(left.score ?? "") ?? 0
         let rn = Double(right.score ?? "") ?? 0
         VStack(spacing: 14) {
@@ -74,7 +74,12 @@ struct GameHero: View {
                 VStack(spacing: 3) {
                     if game.state == .pre {
                         Text(Fmt.time(game.date)).font(.title3.weight(.bold)).monospacedDigit()
-                        Text(Fmt.day(game.date)).font(.caption).foregroundStyle(.white.opacity(0.75))
+                        // Always one line: "Mi. 25. Nov.", else "Mi. 25.11."
+                        ViewThatFits(in: .horizontal) {
+                            Text(Fmt.day(game.date)).lineLimit(1)
+                            Text(Fmt.numeric(game.date)).lineLimit(1)
+                        }
+                        .font(.caption).foregroundStyle(.white.opacity(0.75))
                     } else {
                         StatusLine(state: game.state, text: game.statusText)
                     }
@@ -99,7 +104,8 @@ struct GameHero: View {
         .padding(.horizontal, 16)
         .padding(.top, embedded ? 8 : 30)
         .padding(.bottom, 22)
-        .background(LinearGradient(colors: [lc, .black, rc], startPoint: .topLeading, endPoint: .bottomTrailing))
+        // Team colours fade into the page colour (no hard black in the middle).
+        .background(LinearGradient(colors: [lc.opacity(0.75), .clear, rc.opacity(0.75)], startPoint: .topLeading, endPoint: .bottomTrailing))
     }
 
     private func heroTeam(_ s: Side) -> some View {
@@ -696,6 +702,24 @@ struct BoxTable: View {
     }
 
     private var hasPhotos: Bool { rows.contains { $0.headshot != nil } }
+    private var nameWidth: CGFloat { hasPhotos ? 140 : 118 }
+    /// Space for stats next to the names (page and card padding taken off the screen width).
+    private var statsWidth: CGFloat { max(120, UIScreen.main.bounds.width - 64 - nameWidth) }
+
+    /// How many leading columns fit completely.
+    private func shownColumns(_ widths: [CGFloat]) -> Int {
+        var sum: CGFloat = 0, n = 0
+        for w in widths { if sum + w > statsWidth { break }; sum += w; n += 1 }
+        return max(1, n)
+    }
+
+    /// Column widths with the first screenful stretched to fill the space exactly.
+    private func fittedWidths(_ widths: [CGFloat]) -> [CGFloat] {
+        let n = shownColumns(widths)
+        let used = widths.prefix(n).reduce(0, +)
+        let extra = max(0, statsWidth - used) / CGFloat(n)
+        return widths.enumerated().map { $0.offset < n ? $0.element + extra : $0.element }
+    }
 
     var body: some View {
         let lines = self.lines
@@ -724,43 +748,50 @@ struct BoxTable: View {
                             .frame(height: rowHeight, alignment: .leading)
                     }
                 }
-                .frame(width: hasPhotos ? 140 : 118, alignment: .leading)
+                .frame(width: nameWidth, alignment: .leading)
+                // Stats: one column per stat, snapping column by column. The first view shows only
+                // whole columns, stretched to fill the space exactly.
+                let fitted = fittedWidths(widths)
                 ScrollView(.horizontal, showsIndicators: false) {
-                    VStack(alignment: .trailing, spacing: 0) {
-                        HStack(spacing: 0) {
-                            ForEach(Array(labels.enumerated()), id: \.offset) { cell($0.element, width: widths[$0.offset]) }
-                        }
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(Theme.secondary)
-                        .frame(height: 22)
-                        ForEach(lines) { line in
-                            switch line {
-                            case .header:
-                                Color.clear.frame(height: headerHeight)
-                            case .player(let r, _):
-                                HStack(spacing: 0) {
-                                    ForEach(Array(r.stats.enumerated()), id: \.offset) { i, v in
-                                        cell(v, width: i < widths.count ? widths[i] : 36,
-                                             bold: maxima[i].map { Double(v) == $0 } ?? false)
+                    HStack(spacing: 0) {
+                        ForEach(Array(labels.enumerated()), id: \.offset) { i, label in
+                            let w = fitted[i]
+                            VStack(alignment: .trailing, spacing: 0) {
+                                cell(label, width: w)
+                                    .font(.caption2.weight(.semibold))
+                                    .foregroundStyle(Theme.secondary)
+                                    .frame(height: 22)
+                                ForEach(lines) { line in
+                                    switch line {
+                                    case .header:
+                                        Color.clear.frame(width: w, height: headerHeight)
+                                    case .player(let r, _):
+                                        let v = i < r.stats.count ? r.stats[i] : ""
+                                        cell(v, width: w, bold: maxima[i].map { Double(v) == $0 } ?? false)
+                                            .font(.footnote)
+                                            .frame(height: rowHeight)
                                     }
                                 }
-                                .font(.footnote)
-                                .frame(height: rowHeight)
-                            }
-                        }
-                        if !totals.isEmpty {
-                            HStack(spacing: 0) {
-                                ForEach(Array(totals.enumerated()), id: \.offset) { i, v in
-                                    cell(v, width: i < widths.count ? widths[i] : 36)
+                                if !totals.isEmpty {
+                                    cell(i < totals.count ? totals[i] : "", width: w)
+                                        .font(.footnote.weight(.bold))
+                                        .frame(height: rowHeight)
                                 }
                             }
-                            .font(.footnote.weight(.bold))
-                            .frame(height: rowHeight)
                         }
                     }
+                    .scrollTargetLayout()
                     .monospacedDigit()
                 }
+                .scrollTargetBehavior(.viewAligned)
                 .defaultScrollAnchor(.leading)
+                .frame(width: statsWidth)
+                .overlay(alignment: .topTrailing) {
+                    if fitted.count > shownColumns(widths) {
+                        Image(systemName: "chevron.right").font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(Theme.tertiary).frame(height: 22).offset(x: 8)
+                    }
+                }
             }
             // Full-width shading bands behind every other player row.
             .background(alignment: .top) {

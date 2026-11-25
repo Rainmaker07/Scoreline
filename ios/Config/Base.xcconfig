@@ -6,8 +6,8 @@
 
 // App version, shown in Settings and the README. Bump both with every update:
 // MARKETING_VERSION for the release, CURRENT_PROJECT_VERSION (build) by one.
-MARKETING_VERSION = 1.6.2
-CURRENT_PROJECT_VERSION = 11
+MARKETING_VERSION = 1.7
+CURRENT_PROJECT_VERSION = 12
 
 PRODUCT_BUNDLE_IDENTIFIER = com.rainmaker07.scoreline
 CODE_SIGN_STYLE = Automatic

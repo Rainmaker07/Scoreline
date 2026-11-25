@@ -212,7 +212,7 @@ struct RiderPageView: View {
                 .padding(.bottom, 40)
             }
         }
-        .background(Theme.bg.ignoresSafeArea())
+        .background(PageBackground())
         .navigationTitle("Rider")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)
@@ -314,7 +314,7 @@ struct CyclingTeamView: View {
                 .padding(.bottom, 40)
             }
         }
-        .background(Theme.bg.ignoresSafeArea())
+        .background(PageBackground())
         .navigationTitle("Team")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)

@@ -89,7 +89,7 @@ struct StageDetailView: View {
             }
             .padding(16)
         }
-        .background(Theme.bg.ignoresSafeArea())
+        .background(PageBackground())
         .navigationTitle("Stage \(stage.n)")
         .navigationBarTitleDisplayMode(.inline)
     }

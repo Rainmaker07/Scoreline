@@ -51,6 +51,7 @@ struct RootView: View {
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: Route.self) { RouteView(route: $0) }
         }
+        .environment(\.pageColor, league?.color ?? "1c2a4a")
         .task {
             // Launch options used by the GitHub build (see ScreenshotMode).
             let d = UserDefaults.standard
@@ -65,7 +66,8 @@ struct RootView: View {
                     .navigationDestination(for: Route.self) { RouteView(route: $0) }
             }
             .presentationDragIndicator(.visible)
-            .presentationBackground(Theme.bg)
+            .presentationBackground { PageBackground(color: g.league.color) }
+            .environment(\.pageColor, g.league.color)
             .environmentObject(store)
         }
         .sheet(item: $sheet) { s in
@@ -151,14 +153,18 @@ struct RootView: View {
     }
 }
 
-/// League-tinted backdrop that fades to black, like Apple Sports.
+/// League-coloured backdrop over the whole page, darkening towards the bottom (Apple Sports
+/// style; cards on top are a see-through darker shade of it). Without a colour it uses the
+/// current page colour from the environment.
 struct PageBackground: View {
-    let color: String
+    var color: String? = nil
+    @Environment(\.pageColor) private var envColor
     var body: some View {
-        LinearGradient(colors: [Color(hex: color).opacity(0.95), Color(hex: color).opacity(0.45), .black],
-                       startPoint: .top, endPoint: .init(x: 0.5, y: 0.75))
+        let c = color ?? envColor
+        LinearGradient(colors: [Color(hex: c), Color.deep(c, 0.55), Color.deep(c, 0.3)],
+                       startPoint: .top, endPoint: .bottom)
             .ignoresSafeArea()
-            .animation(.easeInOut(duration: 0.35), value: color)
+            .animation(.easeInOut(duration: 0.35), value: c)
     }
 }
 
@@ -520,6 +526,7 @@ struct RouteView: View {
             NBACupView()
         case .league(let id):
             LeagueScreen(league: League.byId(id)!)
+                .environment(\.pageColor, League.byId(id)!.color)
         case .wiki(let title, let name):
             ScrollView {
                 WikiEventView(title: title).padding(16)

@@ -155,25 +155,25 @@ private struct FormCard: View {
                 CardTitle("Recent form")
                 ForEach([left, right], id: \.id) { side in
                     if let t = teams.first(where: { $0["team"]["id"].str == side.id }) {
-                        HStack(spacing: 8) {
+                        HStack(spacing: 0) {
                             LogoView(url: side.logo, fallback: side.abbr, size: 22)
-                            Text(side.abbr).font(.subheadline.weight(.bold)).frame(width: 44, alignment: .leading)
+                            Text(side.abbr).font(.subheadline.weight(.bold)).frame(width: 48, alignment: .leading).padding(.leading, 8)
                             ForEach(Array(t["events"].array.prefix(5).enumerated()), id: \.offset) { _, e in
                                 let r = e["gameResult"].str
                                 NavigationLink(value: Route.game(stubGame(id: e["id"].str, leagueId: leagueId,
                                                                           date: e["gameDate"].string.flatMap(ESPNDate.parse)))) {
-                                    VStack(spacing: 2) {
-                                        Text(r).font(.caption.weight(.heavy)).foregroundStyle(.white)
-                                            .frame(width: 24, height: 22)
+                                    VStack(spacing: 3) {
+                                        Text(r).font(.subheadline.weight(.heavy)).foregroundStyle(.white)
+                                            .frame(width: 30, height: 26)
                                             .background(r == "W" ? Color(hex: "30d158") : r == "L" ? Color(hex: "ff453a") : Color(white: 0.45),
                                                         in: RoundedRectangle(cornerRadius: 5))
-                                        LogoView(url: e["opponent"]["logo"].url, fallback: e["opponent"]["abbreviation"].str, size: 14)
+                                        LogoView(url: e["opponent"]["logo"].url, fallback: e["opponent"]["abbreviation"].str, size: 18)
                                     }
+                                    .frame(maxWidth: .infinity)
                                 }
                                 .buttonStyle(.plain)
                                 .disabled(e["id"].str.isEmpty)
                             }
-                            Spacer(minLength: 0)
                         }
                     }
                 }
@@ -445,14 +445,20 @@ private struct MomentumCard: View {
                 }
                 RuleMark(x: .value("Half", 45.0)).foregroundStyle(Theme.tertiary)
                 ForEach(Array(keyEvents.enumerated()), id: \.offset) { _, e in
-                    PointMark(x: .value("Minute", Double(e.minute)), y: .value("Pressure", e.home ? 118.0 : -118.0))
-                        .symbol { Text(symbol(e.kind)).font(.system(size: 12)) }
+                    PointMark(x: .value("Minute", Double(e.minute)), y: .value("Pressure", e.home ? 122.0 : -122.0))
+                        .symbol {
+                            Text(symbol(e.kind)).font(.system(size: 13))
+                                .padding(2)
+                                .background(Color.black.opacity(0.35), in: Circle())
+                        }
                 }
                 if let m = minute {
                     RuleMark(x: .value("Selected", m)).foregroundStyle(Color.white.opacity(0.7))
                 }
             }
-            .chartYScale(domain: -130...130)
+            // Bars stay within ±100; the outer lanes hold the event icons.
+            .chartYScale(domain: -145...145)
+            .chartPlotStyle { $0.padding(.vertical, 4) }
             .chartXScale(domain: 0...maxMinute)
             .chartYAxis(.hidden)
             .chartXAxis {
@@ -476,7 +482,7 @@ private struct MomentumCard: View {
                         )
                 }
             }
-            .frame(height: 120)
+            .frame(height: 140)
             HStack { Text(data.homeName).foregroundStyle(hc); Spacer(); Text(data.awayName).foregroundStyle(ac) }
                 .font(.caption.weight(.semibold))
             if !keyEvents.isEmpty {
@@ -526,7 +532,7 @@ private struct ShotMapCard: View {
             GeometryReader { geo in
                 let w = geo.size.width, h = geo.size.height
                 ZStack {
-                    RoundedRectangle(cornerRadius: 10).fill(Color(hex: "256b29"))
+                    RoundedRectangle(cornerRadius: 10).fill(Color(hex: "2f5d3a"))
                     Group {
                         Rectangle().stroke(.white.opacity(0.45), lineWidth: 1).padding(4)
                         Rectangle().fill(.white.opacity(0.45)).frame(width: 1)

@@ -125,7 +125,7 @@ struct DetailHeader: View {
     @State private var resolved: URL??
 
     var body: some View {
-        let tint = Color.visibleTint(color) ?? Color(white: 0.3)
+        let tint = Color.visibleTint(color) ?? Color.white.opacity(0.12)
         let photo: URL? = lookUpPhoto ? (resolved ?? image) : image
         VStack(spacing: 10) {
             if isLogo {
@@ -150,7 +150,7 @@ struct DetailHeader: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 22)
-        .background(LinearGradient(colors: [tint.opacity(0.85), .black], startPoint: .top, endPoint: .bottom))
+        .background(LinearGradient(colors: [tint.opacity(0.7), .clear], startPoint: .top, endPoint: .bottom))
     }
 }
 
@@ -218,7 +218,7 @@ struct TeamView: View {
                 .padding(.bottom, 40)
             }
         }
-        .background(Theme.bg.ignoresSafeArea())
+        .background(PageBackground())
         .navigationTitle(league.short)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)
@@ -496,7 +496,7 @@ struct PlayerView: View {
                 .padding(.bottom, 40)
             }
         }
-        .background(Theme.bg.ignoresSafeArea())
+        .background(PageBackground())
         .navigationTitle(league.short)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)
@@ -569,7 +569,7 @@ struct FavoritesView: View {
         .toolbar(.visible, for: .navigationBar)
         .toolbar { EditButton() }
         .scrollContentBackground(.hidden)
-        .background(Theme.bg.ignoresSafeArea())
+        .background(PageBackground())
     }
 }
 
@@ -644,7 +644,7 @@ struct TennisPlayerView: View {
                 .padding(.bottom, 40)
             }
         }
-        .background(Theme.bg.ignoresSafeArea())
+        .background(PageBackground())
         .navigationTitle("ATP")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)
@@ -757,7 +757,7 @@ struct TennisMatchView: View {
             .padding(.horizontal, 16)
             .padding(.bottom, 40)
         }
-        .background(Theme.bg.ignoresSafeArea())
+        .background(PageBackground())
         .navigationTitle(m.round)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)
@@ -878,7 +878,7 @@ struct RiderView: View {
                 .padding(.bottom, 40)
             }
         }
-        .background(Theme.bg.ignoresSafeArea())
+        .background(PageBackground())
         .navigationTitle("Rider")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)

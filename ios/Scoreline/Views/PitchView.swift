@@ -105,7 +105,7 @@ struct PitchView: View {
 
     private func pitchMarkings(w: CGFloat, h: CGFloat) -> some View {
         ZStack {
-            LinearGradient(colors: [Color(hex: "2e7d32"), Color(hex: "256b29")], startPoint: .top, endPoint: .bottom)
+            LinearGradient(colors: [Color(hex: "35663f"), Color(hex: "2b5634")], startPoint: .top, endPoint: .bottom)
             // stripes
             VStack(spacing: 0) {
                 ForEach(0..<10, id: \.self) { i in

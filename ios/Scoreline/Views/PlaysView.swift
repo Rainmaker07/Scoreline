@@ -356,8 +356,10 @@ private struct WinProbabilityCard: View {
                     PointMark(x: .value("Play", s), y: .value("Away", p.away)).symbolSize(70).foregroundStyle(.white)
                 }
             }
-            .chartYScale(domain: 0...100)
+            // A little room above 100 % and below 0 % so dots at the edges aren't cut.
+            .chartYScale(domain: -5...105)
             .chartXScale(domain: 0...max(1, points.count - 1))
+            .chartPlotStyle { $0.padding(.horizontal, 4) }
             .chartXAxis(.hidden)
             .chartYAxis {
                 AxisMarks(values: [0, 50, 100]) { v in

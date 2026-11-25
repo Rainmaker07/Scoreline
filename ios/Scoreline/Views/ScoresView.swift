@@ -25,7 +25,8 @@ struct LeagueScreen: View {
             NavigationStack {
                 GameDetailView(game: g).navigationDestination(for: Route.self) { RouteView(route: $0) }
             }
-            .presentationBackground(Theme.bg)
+            .presentationBackground { PageBackground(color: g.league.color) }
+            .environment(\.pageColor, g.league.color)
             .environmentObject(store)
         }
     }

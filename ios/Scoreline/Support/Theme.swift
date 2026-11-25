@@ -1,12 +1,14 @@
 import SwiftUI
+import UIKit
 
 enum Theme {
     static let bg = Color.black
-    static let card = Color(hex: "1c1c1e")
-    static let card2 = Color(hex: "2c2c2e")
-    static let separator = Color(white: 0.33, opacity: 0.45)
-    static let secondary = Color(white: 0.92, opacity: 0.6)
-    static let tertiary = Color(white: 0.92, opacity: 0.3)
+    /// Cards are a darker, see-through version of the page colour behind them (Apple Sports style).
+    static let card = Color.black.opacity(0.28)
+    static let card2 = Color.white.opacity(0.08)
+    static let separator = Color.white.opacity(0.12)
+    static let secondary = Color.white.opacity(0.62)
+    static let tertiary = Color.white.opacity(0.36)
     static let live = Color(hex: "ff3b30")
     static let win = Color(hex: "30d158")
     static let radius: CGFloat = 22
@@ -28,16 +30,28 @@ extension Color {
         self = Color(red: r, green: g, blue: b)
     }
 
-    /// Returns nil for colours that would be invisible on black or glaring white.
+    /// Team colour softened for a dark UI: a little less saturated, never too dark to read
+    /// (Apple Sports style). Nil for near-black or near-white colours.
     static func visibleTint(_ hex: String?) -> Color? {
         guard let hex, hex.count >= 6 else { return nil }
         let h = hex.trimmingCharacters(in: CharacterSet(charactersIn: "#"))
         var v: UInt64 = 0
         Scanner(string: h).scanHexInt64(&v)
-        let r = Double((v >> 16) & 0xff), g = Double((v >> 8) & 0xff), b = Double(v & 0xff)
-        let lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+        let r = Double((v >> 16) & 0xff) / 255, g = Double((v >> 8) & 0xff) / 255, b = Double(v & 0xff) / 255
+        let lum = 0.299 * r + 0.587 * g + 0.114 * b
         if lum < 0.08 || lum > 0.92 { return nil }
-        return Color(hex: h)
+        var hue: CGFloat = 0, sat: CGFloat = 0, bri: CGFloat = 0, a: CGFloat = 0
+        UIColor(red: r, green: g, blue: b, alpha: 1).getHue(&hue, saturation: &sat, brightness: &bri, alpha: &a)
+        return Color(hue: hue, saturation: sat * 0.82, brightness: max(bri, 0.62))
+    }
+
+    /// The page colour darkened (bottom of the page gradient).
+    static func deep(_ hex: String, _ factor: Double = 0.38) -> Color {
+        let h = hex.trimmingCharacters(in: CharacterSet(charactersIn: "#"))
+        var v: UInt64 = 0
+        Scanner(string: h).scanHexInt64(&v)
+        let r = Double((v >> 16) & 0xff) / 255, g = Double((v >> 8) & 0xff) / 255, b = Double(v & 0xff) / 255
+        return Color(red: r * factor, green: g * factor, blue: b * factor)
     }
 }
 
@@ -417,5 +431,15 @@ enum Units {
         if m > 12 { swap(&m, &d) }
         guard let date = Calendar.current.date(from: DateComponents(year: parts[2], month: m, day: d)) else { return s }
         return Fmt.dateYear(date)
+    }
+}
+
+
+/// The colour of the current page (league or team), handed down to pushed screens.
+private struct PageColorKey: EnvironmentKey { static let defaultValue = "1c2a4a" }
+extension EnvironmentValues {
+    var pageColor: String {
+        get { self[PageColorKey.self] }
+        set { self[PageColorKey.self] = newValue }
     }
 }
