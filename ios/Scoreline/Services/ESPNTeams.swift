@@ -375,20 +375,47 @@ extension ESPN {
     static func sportPath(_ league: League) -> String? { league.espn }
 
     /// "2026-27 English Premier League" -> ("Premier League", epl); unknown competitions keep a clean name.
-    static func competitionLabel(_ raw: String) -> (name: String, league: League?) {
+    /// `homeLeague` names the domestic cup ESPN calls just "Cup".
+    static func competitionLabel(_ raw: String, homeLeague: League? = nil) -> (name: String, league: League?, logo: URL?) {
         var n = raw.replacingOccurrences(of: #"^\d{4}(-\d{2})?\s+"#, with: "", options: .regularExpression)
         for p in ["English ", "German ", "UEFA ", "FIFA ", "Spanish ", "Italian ", "French "] where n.hasPrefix(p) { n.removeFirst(p.count) }
         let lower = n.lowercased()
+        func espnLogo(_ id: Int) -> URL? { URL(string: "https://a.espncdn.com/i/leaguelogos/soccer/500/\(id).png") }
+        if lower.contains("women") { return (n, nil, nil) }
+        // Competitions the app covers: name, logo and a link.
         let map: [(String, String)] = [("premier league", "epl"), ("2. bundesliga", "bl2"), ("bundesliga", "bl1"),
                                        ("champions league", "ucl"), ("europa conference", "uecl"), ("conference league", "uecl"),
                                        ("europa league", "uel"), ("dfb", "dfb"), ("german cup", "dfb"), ("fa cup", "fac")]
-        if lower.contains("community shield") { return ("Community Shield", nil) }
-        if lower.contains("friendl") { return ("Friendlies", nil) }
-        if let hit = map.first(where: { lower.contains($0.0) && !lower.contains("women") }), let l = League.byId(hit.1) {
-            return (l.short, l)
+        if let hit = map.first(where: { lower.contains($0.0) }), let l = League.byId(hit.1) {
+            return (l.short, l, l.logo)
         }
-        if lower == "fa community shield" { return ("Community Shield", nil) }
-        return (n, nil)
+        // ESPN's plain "Cup" is the domestic cup of the player's league.
+        if lower == "cup" || lower == "domestic cup" {
+            switch homeLeague?.id {
+            case "bl1", "bl2":
+                if let l = League.byId("dfb") { return (l.short, l, l.logo) }
+            case "epl":
+                if let l = League.byId("fac") { return (l.short, l, l.logo) }
+            default: break
+            }
+            return ("Domestic Cup", nil, nil)
+        }
+        let others: [(String, String, URL?)] = [
+            ("community shield", "Community Shield", WikiLogo.url(for: "FA Community Shield")),
+            ("supercup", "DFL-Supercup", WikiLogo.url(for: "DFL-Supercup")),
+            ("super cup", "Super Cup", nil),
+            ("carabao", "EFL Cup", espnLogo(41)), ("league cup", "EFL Cup", espnLogo(41)),
+            ("world cup qualifying", "WC Qualifying", espnLogo(67)),
+            ("club world cup", "Club World Cup", espnLogo(1932)),
+            ("world cup", "World Cup", espnLogo(4)),
+            ("nations league", "Nations League", espnLogo(2395)),
+            ("european championship", "Euro", espnLogo(74)), ("euro ", "Euro", espnLogo(74)),
+            ("copa del rey", "Copa del Rey", espnLogo(80)), ("coppa italia", "Coppa Italia", espnLogo(2192)),
+            ("coupe de france", "Coupe de France", espnLogo(182)),
+            ("friendl", "Friendlies", nil),
+        ]
+        if let hit = others.first(where: { lower.contains($0.0) }) { return (hit.1, nil, hit.2) }
+        return (n, nil, nil)
     }
 
     static func player(_ league: League, id: String) async throws -> PlayerPage {
@@ -431,14 +458,25 @@ extension ESPN {
             let splits = ovs["splits"].array
             // Football: "2026-27 UEFA Nations League" -> "Nations League", with logo and a link
             // to the competition when the app covers it.
-            let comps = splits.map { competitionLabel($0["displayName"].str) }
+            let comps = splits.map { competitionLabel($0["displayName"].str, homeLeague: league) }
+            var labels = ovs["labels"].array.map(\.str)
+            var rows: [(name: String, values: [String])] = zip(comps, splits).map { (name: $0.0.name, values: $0.1["stats"].array.map(\.str)) }
+            if league.family == .soccer {
+                // Starts, goals, assists, yellow and red cards (fits the screen without scrolling).
+                let want: [(String, String)] = [("STRT", "ST"), ("G", "G"), ("A", "A"), ("YC", "YC"), ("RC", "RC")]
+                let idx = want.compactMap { w in labels.firstIndex(of: w.0).map { ($0, w.1) } }
+                if idx.count >= 3 {
+                    labels = idx.map(\.1)
+                    rows = rows.map { r in (name: r.name, values: idx.map { $0.0 < r.values.count ? r.values[$0.0] : "" }) }
+                }
+            }
             var table = StatTable(
                 title: ovs["displayName"].string ?? "Stats",
-                labels: ovs["labels"].array.map(\.str),
-                rows: zip(comps, splits).map { ($0.0.name, $0.1["stats"].array.map(\.str)) }
+                labels: labels,
+                rows: rows
             )
             if league.family == .soccer {
-                table.rowLogos = comps.map { $0.league?.logo }
+                table.rowLogos = comps.map(\.logo)
                 table.rowRoutes = comps.map { $0.league.map { Route.league($0.id) } }
             }
             tables.append(table)

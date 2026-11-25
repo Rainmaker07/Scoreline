@@ -54,9 +54,14 @@ struct StatTableView: View {
                         linked(i) {
                             HStack(spacing: 5) {
                                 if i < table.rowLogos.count {
-                                    LogoView(url: table.rowLogos[i], fallback: "", size: 16)
+                                    if let logo = table.rowLogos[i] {
+                                        LogoView(url: logo, fallback: "", size: 16)
+                                    } else {
+                                        Image(systemName: "soccerball").font(.system(size: 12)).foregroundStyle(Theme.secondary)
+                                            .frame(width: 16, height: 16)
+                                    }
                                 }
-                                Text(r.name).font(.footnote.weight(.semibold)).lineLimit(1).minimumScaleFactor(0.7)
+                                Text(r.name).font(.footnote.weight(.semibold)).lineLimit(1).truncationMode(.tail)
                                 if route(i) != nil {
                                     Image(systemName: "chevron.right").font(.system(size: 9, weight: .bold)).foregroundStyle(Theme.tertiary)
                                 }
@@ -97,7 +102,7 @@ struct StatTableView: View {
         return (0..<n).map { i in
             let longest = ([i < table.labels.count ? table.labels[i] : ""] + table.rows.map { i < $0.values.count ? $0.values[i] : "" })
                 .map(\.count).max() ?? 0
-            return max(40, CGFloat(longest) * 7.6 + 10)
+            return max(34, CGFloat(longest) * 7.6 + 10)
         }
     }
 
@@ -114,19 +119,28 @@ struct DetailHeader: View {
     let subtitle: String?
     let color: String?
     var trailing: AnyView? = nil
+    /// Player pages: look further (FotMob, Wikipedia) when the headshot is missing.
+    var football = false
+    var lookUpPhoto = false
+    @State private var resolved: URL??
 
     var body: some View {
         let tint = Color.visibleTint(color) ?? Color(white: 0.3)
+        let photo: URL? = lookUpPhoto ? (resolved ?? image) : image
         VStack(spacing: 10) {
             if isLogo {
                 LogoView(url: image, fallback: title, size: 88)
             } else {
-                CachedImage(url: image) { $0.resizable().scaledToFill() } placeholder: {
+                CachedImage(url: photo) { $0.resizable().scaledToFill() } placeholder: {
                     Image(systemName: "person.fill").font(.system(size: 40)).foregroundStyle(Theme.secondary)
                 }
                 .frame(width: 104, height: 104)
                 .background(Theme.card2)
                 .clipShape(Circle())
+                .task(id: title) {
+                    guard lookUpPhoto else { return }
+                    resolved = .some(await PlayerPhotos.best(primary: image, name: title, team: subtitle ?? "", football: football))
+                }
             }
             Text(title).font(.title2.weight(.heavy)).multilineTextAlignment(.center)
             if let subtitle, !subtitle.isEmpty {
@@ -444,7 +458,8 @@ struct PlayerView: View {
                        return try await ESPN.player(league, id: playerId)
                    }) { p in
                 VStack(spacing: 14) {
-                    DetailHeader(image: p.headshot, isLogo: false, title: p.name, subtitle: p.team, color: nil)
+                    DetailHeader(image: p.headshot, isLogo: false, title: p.name, subtitle: p.team, color: nil,
+                                 football: league.family == .soccer, lookUpPhoto: true)
                     VStack(spacing: 14) {
                         if let teamId = p.teamId, let team = p.team {
                             NavigationLink(value: Route.team(leagueId: leagueId, teamId: teamId)) {

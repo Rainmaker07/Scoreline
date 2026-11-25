@@ -14,7 +14,7 @@ struct PlayerPhoto: View {
     var body: some View {
         // Only use a looked-up photo if it belongs to *this* player (rows get reused).
         let found = lookedUp?.name == name ? lookedUp?.url : nil
-        let photo = headshot ?? found
+        let photo = lookedUp?.name == name ? found : headshot
         ZStack(alignment: .bottomTrailing) {
             if let photo {
                 CachedImage(url: photo) { $0.resizable().scaledToFill() } placeholder: { Theme.card2 }
@@ -32,8 +32,9 @@ struct PlayerPhoto: View {
         }
         .frame(width: size, height: size)
         .task(id: name) {
-            guard headshot == nil, isFootball, lookedUp?.name != name else { return }
-            let url = await FotMob.photo(name: name, team: team)
+            guard lookedUp?.name != name else { return }
+            // Also replaces headshots that don't load (ESPN lists some that 404).
+            let url = await PlayerPhotos.best(primary: headshot, name: name, team: team, football: isFootball)
             lookedUp = (name, url)
         }
     }

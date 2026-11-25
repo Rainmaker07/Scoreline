@@ -30,6 +30,17 @@ enum FotMobMatch {
         let awayValue: Double?
     }
 
+    struct Event: Hashable {
+        enum Kind: String { case goal, ownGoal, penalty, yellow, red, bigChance }
+        let minute: Int
+        let kind: Kind
+        let home: Bool
+        let player: String
+        let score: (Int, Int)?
+        static func == (a: Event, b: Event) -> Bool { a.minute == b.minute && a.kind == b.kind && a.player == b.player }
+        func hash(into h: inout Hasher) { h.combine(minute); h.combine(kind); h.combine(player) }
+    }
+
     struct Data {
         let matchId: Int
         let homeName: String
@@ -44,6 +55,8 @@ enum FotMobMatch {
         /// Head-to-head: home wins, draws, away wins, and recent meetings.
         let h2h: (home: Int, draws: Int, away: Int)?
         let h2hMatches: [(date: Date?, home: String, away: String, score: String, competition: String)]
+        /// Goals, cards and big chances in match order.
+        var events: [Event] = []
     }
 
     private static func normalize(_ s: String) -> [String] {
@@ -147,9 +160,34 @@ enum FotMobMatch {
              competition: m["league"]["name"].str)
         }
 
+        var events: [Event] = []
+        for e in c["matchFacts"]["events"]["events"].array {
+            let minute = (e["time"].int ?? 0) + (e["overloadTime"].int ?? 0)
+            let home = e["isHome"].bool ?? false
+            let name = e["player"]["name"].string ?? e["nameStr"].str
+            switch e["type"].str {
+            case "Goal":
+                let sc = e["newScore"].array.compactMap(\.int)
+                let kind: Event.Kind = e["ownGoal"].bool == true ? .ownGoal
+                    : (e["goalDescription"].str.lowercased().contains("pen") ? .penalty : .goal)
+                events.append(Event(minute: minute, kind: kind, home: home, player: name, score: sc.count == 2 ? (sc[0], sc[1]) : nil))
+            case "Card":
+                let card = e["card"].str.lowercased()
+                if card.contains("red") { events.append(Event(minute: minute, kind: .red, home: home, player: name, score: nil)) }
+                else if card.contains("yellow") { events.append(Event(minute: minute, kind: .yellow, home: home, player: name, score: nil)) }
+            default: break
+            }
+        }
+        // Big chances: missed shots worth at least 0.35 xG.
+        for sh in shots where !sh.isGoal && sh.xg >= 0.35 {
+            events.append(Event(minute: sh.minute, kind: .bigChance, home: sh.home, player: sh.player, score: nil))
+        }
+        events.sort { $0.minute < $1.minute }
+
         return Data(matchId: id, homeName: homeName, awayName: awayName,
                     xg: xg.map { (home: $0.0, away: $0.1) }, groups: groups, shots: shots, momentum: momentum,
                     ratings: ratings.sorted { $0.rating > $1.rating }, playerOfTheMatch: potm,
-                    h2h: h2h.map { (home: $0.0, draws: $0.1, away: $0.2) }, h2hMatches: Array(h2hMatches))
+                    h2h: h2h.map { (home: $0.0, draws: $0.1, away: $0.2) }, h2hMatches: Array(h2hMatches),
+                    events: events)
     }
 }

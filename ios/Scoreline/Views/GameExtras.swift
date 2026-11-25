@@ -286,28 +286,131 @@ private struct XGCard: View {
     }
 }
 
+/// Pressure by minute. Drag along it to see the minute, the score then and who was
+/// on top; goals, cards and big chances are marked above the bars and listed below.
 private struct MomentumCard: View {
     let data: FotMobMatch.Data
     let homeColor: String?
     let awayColor: String?
+    @State private var minute: Double?
+
+    private var keyEvents: [FotMobMatch.Event] { data.events.filter { $0.kind != .yellow } }
+
+    private func score(at m: Double) -> (Int, Int) {
+        var sc = (0, 0)
+        for e in data.events where Double(e.minute) <= m {
+            if let s = e.score { sc = s }
+        }
+        return sc
+    }
+
+    private func symbol(_ k: FotMobMatch.Event.Kind) -> String {
+        switch k {
+        case .goal, .penalty: return "⚽️"
+        case .ownGoal: return "⚽️"
+        case .red: return "🟥"
+        case .yellow: return "🟨"
+        case .bigChance: return "💥"
+        }
+    }
+
+    private func label(_ e: FotMobMatch.Event) -> String {
+        switch e.kind {
+        case .goal: return "Goal"
+        case .penalty: return "Penalty goal"
+        case .ownGoal: return "Own goal"
+        case .red: return "Red card"
+        case .yellow: return "Yellow card"
+        case .bigChance: return "Big chance"
+        }
+    }
+
     var body: some View {
         let hc = Color.visibleTint(homeColor) ?? .blue
         let ac = Color.visibleTint(awayColor) ?? .red
+        let last = data.momentum.last?.minute ?? 90
+        let shownMinute = minute ?? last
+        let point = data.momentum.min { abs($0.minute - shownMinute) < abs($1.minute - shownMinute) }
+        let sc = score(at: shownMinute)
+        let maxMinute = max(90, last)
         VStack(alignment: .leading, spacing: 8) {
             CardTitle("Momentum")
+            HStack {
+                Text("\(Int(shownMinute))'").font(.subheadline.weight(.bold)).monospacedDigit()
+                Text("\(sc.0)–\(sc.1)").font(.subheadline.weight(.bold)).monospacedDigit()
+                Spacer()
+                if let v = point?.value, abs(v) >= 5 {
+                    Text("\(v >= 0 ? data.homeName : data.awayName) on top")
+                        .font(.caption.weight(.semibold)).foregroundStyle(v >= 0 ? hc : ac)
+                } else {
+                    Text("Even").font(.caption.weight(.semibold)).foregroundStyle(Theme.secondary)
+                }
+            }
             Chart {
                 ForEach(Array(data.momentum.enumerated()), id: \.offset) { _, p in
                     BarMark(x: .value("Minute", p.minute), y: .value("Pressure", p.value), width: .fixed(3))
                         .foregroundStyle(p.value >= 0 ? hc : ac)
                 }
                 RuleMark(x: .value("Half", 45.0)).foregroundStyle(Theme.tertiary)
+                ForEach(Array(keyEvents.enumerated()), id: \.offset) { _, e in
+                    PointMark(x: .value("Minute", Double(e.minute)), y: .value("Pressure", e.home ? 118.0 : -118.0))
+                        .symbolSize(0)
+                        .annotation(position: .overlay) { Text(symbol(e.kind)).font(.system(size: 11)) }
+                }
+                if let m = minute {
+                    RuleMark(x: .value("Selected", m)).foregroundStyle(Color.white.opacity(0.7))
+                }
             }
-            .chartYScale(domain: -100...100)
+            .chartYScale(domain: -130...130)
+            .chartXScale(domain: 0...maxMinute)
             .chartYAxis(.hidden)
             .chartXAxis { AxisMarks(values: [0.0, 45.0, 90.0]) { v in AxisValueLabel { Text("\(Int(v.as(Double.self) ?? 0))'") } } }
-            .frame(height: 90)
+            .chartOverlay { proxy in
+                GeometryReader { geo in
+                    Rectangle().fill(.clear).contentShape(Rectangle())
+                        .gesture(
+                            DragGesture(minimumDistance: 0)
+                                .onChanged { v in
+                                    guard let plot = proxy.plotFrame else { return }
+                                    if let m: Double = proxy.value(atX: v.location.x - geo[plot].origin.x) {
+                                        minute = min(max(0, m), maxMinute)
+                                    }
+                                }
+                                .onEnded { _ in minute = nil }
+                        )
+                }
+            }
+            .frame(height: 120)
             HStack { Text(data.homeName).foregroundStyle(hc); Spacer(); Text(data.awayName).foregroundStyle(ac) }
                 .font(.caption.weight(.semibold))
+            if !keyEvents.isEmpty {
+                Divider().overlay(Theme.separator).padding(.vertical, 4)
+                Text("KEY MOMENTS").font(.caption.weight(.bold)).foregroundStyle(Theme.secondary)
+                ForEach(Array(keyEvents.enumerated()), id: \.offset) { _, e in
+                    Button {
+                        minute = minute == Double(e.minute) ? nil : Double(e.minute)
+                    } label: {
+                        HStack(spacing: 10) {
+                            Text("\(e.minute)'").font(.caption.weight(.bold)).monospacedDigit()
+                                .foregroundStyle(Theme.secondary).frame(width: 32, alignment: .leading)
+                            Text(symbol(e.kind)).font(.caption)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(e.player).font(.footnote.weight(.semibold))
+                                Text("\(label(e)) · \(e.home ? data.homeName : data.awayName)")
+                                    .font(.caption).foregroundStyle(Theme.secondary)
+                            }
+                            Spacer()
+                            if let s = e.score {
+                                Text("\(s.0)–\(s.1)").font(.footnote.weight(.bold)).monospacedDigit()
+                            }
+                        }
+                        .padding(.vertical, 4)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            Text("Drag along the chart to follow the match.").font(.caption2).foregroundStyle(Theme.tertiary)
         }
         .card()
     }
