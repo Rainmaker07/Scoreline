@@ -346,6 +346,7 @@ struct CyclingRankingsView: View {
                                 NavigationLink(value: Route.rider(name: w.name)) {
                                     HStack(spacing: 12) {
                                         Text("\(i + 1)").font(.footnote.weight(.bold)).foregroundStyle(Theme.secondary).frame(width: 22)
+                                        RiderPhoto(name: w.name)
                                         VStack(alignment: .leading, spacing: 1) {
                                             HStack(spacing: 5) {
                                                 Text(w.name).font(.subheadline.weight(.semibold)).lineLimit(2).minimumScaleFactor(0.85)
@@ -381,6 +382,7 @@ struct CyclingRankingsView: View {
                                 NavigationLink(value: kind == 0 ? Route.rider(name: e.name) : Route.cyclingTeam(e.name)) {
                                     HStack(spacing: 12) {
                                         Text("\(e.rank)").font(.footnote.weight(.bold)).foregroundStyle(Theme.secondary).frame(width: 26)
+                                        if kind == 0 { RiderPhoto(name: e.name) } else { TeamLogoBadge(name: e.name, logo: nil) }
                                         VStack(alignment: .leading, spacing: 1) {
                                             HStack(spacing: 5) {
                                                 Text(e.name).font(.subheadline.weight(.semibold)).lineLimit(2).minimumScaleFactor(0.85)
@@ -513,5 +515,28 @@ enum RaceLogos {
     static func germanQueries(_ name: String) -> [String] {
         let n = name.replacingOccurrences(of: "–", with: "-").replacingOccurrences(of: "/ ", with: "")
         return [n, "\(n) Radrennen"]
+    }
+}
+
+
+/// Small round rider photo (Wikipedia lead image), silhouette if none.
+struct RiderPhoto: View {
+    let name: String
+    var size: CGFloat = 32
+    @State private var found: (name: String, url: URL?)?
+
+    var body: some View {
+        let url = found?.name == name ? found?.url : nil
+        CachedImage(url: url) { $0.resizable().scaledToFill() } placeholder: {
+            Image(systemName: "person.fill").font(.system(size: size * 0.45)).foregroundStyle(Theme.secondary)
+        }
+        .frame(width: size, height: size)
+        .background(Theme.card2)
+        .clipShape(Circle())
+        .task(id: name) {
+            guard found?.name != name else { return }
+            let u = await PlayerPhotos.best(primary: nil, name: name, team: "", football: false)
+            found = (name, u)
+        }
     }
 }

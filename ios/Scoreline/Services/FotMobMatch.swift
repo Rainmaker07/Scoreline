@@ -87,17 +87,24 @@ enum FotMobMatch {
         let f = DateFormatter()
         f.dateFormat = "yyyyMMdd"
         f.timeZone = TimeZone(identifier: "Europe/Berlin")
-        for d in [game.date, game.date.addingTimeInterval(-86_400)] {
+        var oneSided: [Int] = []
+        for d in [game.date, game.date.addingTimeInterval(-86_400), game.date.addingTimeInterval(86_400)] {
             let day = f.string(from: d)
             guard let url = URL(string: "https://www.fotmob.com/api/data/matches?date=\(day)&timezone=Europe%2FBerlin"),
                   let j = try? await HTTP.shared.json(url, maxAge: game.state == .post ? 86_400 : 120) else { continue }
             for l in j["leagues"].array {
-                for m in l["matches"].array where sameTeam(m["home"]["name"].str, game.home.name)
-                    && sameTeam(m["away"]["name"].str, game.away.name) {
-                    if let id = m["id"].int { idCache[game.id] = id; return id }
+                for m in l["matches"].array {
+                    let h = sameTeam(m["home"]["name"].str, game.home.name), a = sameTeam(m["away"]["name"].str, game.away.name)
+                    if h && a, let id = m["id"].int { idCache[game.id] = id; return id }
+                    // One side matches and the kick-off time is the same: remember as a fallback.
+                    if h || a, let id = m["id"].int, let t = m["status"]["utcTime"].string ?? m["time"].string,
+                       let kick = ESPNDate.parse(t), abs(kick.timeIntervalSince(game.date)) < 600 {
+                        oneSided.append(id)
+                    }
                 }
             }
         }
+        if oneSided.count == 1 { idCache[game.id] = oneSided[0]; return oneSided[0] }
         return nil
     }
 

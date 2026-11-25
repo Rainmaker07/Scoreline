@@ -97,15 +97,6 @@ private struct OddsCard: View {
                     if let draw { price("Draw", draw, logo: nil) }
                     price(right.abbr, r, logo: right.logo)
                 }
-                if let ou = o["overUnder"].double {
-                    row("Over/under \(String(format: "%g", ou))",
-                        [Self.decimal(o["overOdds"].double).map { "Over \($0)" }, Self.decimal(o["underOdds"].double).map { "Under \($0)" }]
-                            .compactMap { $0 }.joined(separator: " · "))
-                }
-                if draw == nil, let spread = o["details"].string, !spread.isEmpty {
-                    let sp = Self.decimal(side(left)["spreadOdds"].double)
-                    row("Spread", spread + (sp.map { " · \($0)" } ?? ""))
-                }
                 if let prov = o["provider"]["name"].string {
                     Text("Decimal odds · \(prov)").font(.caption2).foregroundStyle(Theme.tertiary)
                 }
@@ -455,8 +446,7 @@ private struct MomentumCard: View {
                 RuleMark(x: .value("Half", 45.0)).foregroundStyle(Theme.tertiary)
                 ForEach(Array(keyEvents.enumerated()), id: \.offset) { _, e in
                     PointMark(x: .value("Minute", Double(e.minute)), y: .value("Pressure", e.home ? 118.0 : -118.0))
-                        .symbolSize(0)
-                        .annotation(position: .overlay) { Text(symbol(e.kind)).font(.system(size: 11)) }
+                        .symbol { Text(symbol(e.kind)).font(.system(size: 12)) }
                 }
                 if let m = minute {
                     RuleMark(x: .value("Selected", m)).foregroundStyle(Color.white.opacity(0.7))
@@ -465,7 +455,12 @@ private struct MomentumCard: View {
             .chartYScale(domain: -130...130)
             .chartXScale(domain: 0...maxMinute)
             .chartYAxis(.hidden)
-            .chartXAxis { AxisMarks(values: [0.0, 45.0, 90.0]) { v in AxisValueLabel { Text("\(Int(v.as(Double.self) ?? 0))'") } } }
+            .chartXAxis {
+                AxisMarks(values: [0.0, 45.0, 90.0]) { v in
+                    let m = v.as(Double.self) ?? 0
+                    AxisValueLabel(anchor: m >= 90 ? .topTrailing : (m == 0 ? .topLeading : .top)) { Text("\(Int(m))'") }
+                }
+            }
             .chartOverlay { proxy in
                 GeometryReader { geo in
                     Rectangle().fill(.clear).contentShape(Rectangle())

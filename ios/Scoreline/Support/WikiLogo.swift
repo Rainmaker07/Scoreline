@@ -159,7 +159,7 @@ enum WikiLogo {
         let key = english + "|" + germanQueries.joined(separator: "|")
         if let hit = cache[key] { return hit }
         var url: URL?
-        if let u = articleURL(english, lang: "en"), let html = try? await HTTP.shared.text(u, maxAge: 86_400 * 14) {
+        if !english.isEmpty, let u = articleURL(english, lang: "en"), let html = try? await HTTP.shared.text(u, maxAge: 86_400 * 14) {
             url = infoboxLogo(in: html, strict: true, title: english)
         }
         var tried = Set<String>()

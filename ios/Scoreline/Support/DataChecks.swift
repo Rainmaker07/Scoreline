@@ -125,6 +125,14 @@ enum DataChecks {
             try dcExpect(!s["lastFiveGames"].array.isEmpty, "no recent form")
             return "predictor \(s["predictor"].exists ? "yes" : "no"), odds \(s["pickcenter"].array.isEmpty ? "no" : "yes"), injuries \(s["injuries"].array.count)"
         }
+        add("FotMob", "Champions League match data") {
+            guard let g = try await GameFeed.days(dcLeague("ucl"), dcDaysBack(14)).last(where: { $0.state == .post }) else {
+                return "no finished CL game in 2 weeks"
+            }
+            guard let d = await FotMobMatch.load(g) else { throw DataCheckFailure(message: "\(g.home.name) v \(g.away.name) (\(g.date)): not found on FotMob") }
+            try dcExpect(d.xg != nil && d.momentum.count > 5, "no xG or momentum")
+            return "\(g.home.abbr) v \(g.away.abbr): xG \(String(format: "%.2f-%.2f", d.xg!.home, d.xg!.away)), \(d.events.count) events"
+        }
         add("FotMob", "Match data (xG, shots, ratings)") {
             guard let g = try await GameFeed.days(dcLeague("epl"), dcDaysBack(9)).last(where: { $0.state == .post }) else {
                 throw DataCheckFailure(message: "no finished game")
@@ -292,24 +300,25 @@ enum DataChecks {
 
         // MARK: Diagnostics (always pass; the detail shows what the sources contain)
         add("Diagnostics", "Standings names") {
-            // iPhone 13: the team column is ~98 pt wide; names may shrink to 80 % and wrap to two lines.
-            let font = UIFont.systemFont(ofSize: 14, weight: .semibold)
+            // iPhone 13: the team column is ~98 pt wide. Names use 14 pt, then 12.5 pt, then a short form.
+            let big = UIFont.systemFont(ofSize: 14, weight: .semibold)
+            let small = UIFont.systemFont(ofSize: 12.5, weight: .semibold)
             let column: CGFloat = 98
-            var wraps: [String] = []
-            var tooLong: [String] = []
+            var smaller: [String] = []
+            var shortened: [String] = []
             for id in ["epl", "bl1", "bl2", "ucl", "uel", "uecl", "prem"] {
                 guard let league = League.byId(id) else { continue }
                 let groups = (try? await ESPN.standings(league, divisions: false)) ?? []
                 for row in groups.flatMap(\.rows) {
                     let name = tableName(row.short)
-                    let w = (name as NSString).size(withAttributes: [.font: font]).width
-                    if w > column * 2 / 0.8 { tooLong.append("\(name) (\(id))") }
-                    else if w > column / 0.8 { wraps.append(name) }
+                    func w(_ f: UIFont) -> CGFloat { (name as NSString).size(withAttributes: [.font: f]).width }
+                    if w(small) > column { shortened.append("\(name) → \(shortForm(name))") }
+                    else if w(big) > column { smaller.append(name) }
                 }
             }
-            return "\(tooLong.count) too long, \(wraps.count) wrap to two lines" +
-                (tooLong.isEmpty ? "" : " || too long: " + tooLong.joined(separator: ", ")) +
-                (wraps.isEmpty ? "" : " || wrap: " + Set(wraps).sorted().joined(separator: ", "))
+            return "\(shortened.count) shortened, \(smaller.count) in smaller text" +
+                (shortened.isEmpty ? "" : " || shortened: " + Set(shortened).sorted().joined(separator: ", ")) +
+                (smaller.isEmpty ? "" : " || smaller: " + Set(smaller).sorted().joined(separator: ", "))
         }
         add("Diagnostics", "Rugby squads") {
             let names = try await ESPN.standings(dcLeague("prem"), divisions: false).flatMap(\.rows).map(\.name)

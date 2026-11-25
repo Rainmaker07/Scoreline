@@ -271,7 +271,7 @@ enum CyclingPeople {
         var trace: [String] = ["article '\(title)'"]
         if let url = CyclingService.wikiURL(title), let html = try? await HTTP.shared.text(url, maxAge: 86_400 * 3) {
             // Only real logos (some articles lead with a team photo or the jersey).
-            logo = WikiLogo.infoboxLogo(in: html, strict: true)
+            logo = WikiLogo.infoboxLogo(in: html, strict: true, title: plain(title))
                 ?? WikiLogo.infoboxLogo(in: html).flatMap { $0.pathExtension.lowercased() == "png" ? $0 : nil }
             trace.append("images " + WikiLogo.infoboxImages(in: html).prefix(4).joined(separator: ",") + " {\(WikiLogo.imageDebug(in: html))}")
             let box = WikiHTML.tables(in: html).first { $0.rows.contains { ["UCI code", "Registered", "Founded"].contains($0.first ?? "") } }
@@ -306,6 +306,10 @@ enum CyclingPeople {
                 wins = w
                 break search
             }
+        }
+        // No logo in the English article: try the German one.
+        if logo == nil {
+            logo = await WikiLogo.eventLogo(english: "", germanQueries: [plain(title), plain(name) + " Radsportteam"])
         }
         return CyclingTeamProfile(name: plain(title), image: logo, info: info, roster: roster, wins: wins,
                                   extract: summary?.extract, trace: trace.joined(separator: "; "))

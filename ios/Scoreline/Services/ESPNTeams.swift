@@ -407,7 +407,7 @@ extension ESPN {
             ("carabao", "EFL Cup", espnLogo(41)), ("league cup", "EFL Cup", espnLogo(41)),
             ("world cup qualifying", "WC Qualifying", espnLogo(67)),
             ("club world cup", "Club World Cup", espnLogo(1932)),
-            ("world cup", "World Cup", espnLogo(4)),
+            ("world cup", "World Cup", WikiLogo.url(for: "2026 FIFA World Cup")),
             ("nations league", "Nations League", espnLogo(2395)),
             ("european championship", "Euro", espnLogo(74)), ("euro ", "Euro", espnLogo(74)),
             ("copa del rey", "Copa del Rey", espnLogo(80)), ("coppa italia", "Coppa Italia", espnLogo(2192)),

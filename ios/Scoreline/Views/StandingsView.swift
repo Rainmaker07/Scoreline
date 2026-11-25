@@ -64,6 +64,13 @@ private func details(_ league: League) -> [Col] {
 }
 
 /// Shorter forms for names that don't fit the table on a 390-pt-wide phone.
+/// Short form for names that don't fit: the first word as an initial ("D. Zagreb").
+func shortForm(_ name: String) -> String {
+    let words = name.split(separator: " ").map(String.init)
+    guard words.count > 1, let first = words.first?.first else { return name }
+    return "\(first). " + words.dropFirst().joined(separator: " ")
+}
+
 func tableName(_ name: String) -> String {
     let map: [String: String] = [
         "Wolverhampton": "Wolves", "Wolverhampton Wanderers": "Wolves", "Nottingham Forest": "Forest", "Nott'm Forest": "Forest",
@@ -362,12 +369,15 @@ struct StandingsTable: View {
                         VStack(alignment: .leading, spacing: 1) {
                             let hasLine = !(live?.text ?? "").isEmpty
                             HStack(spacing: 4) {
-                                // Never cut a name: shrink a little, then wrap.
-                                Text(league.family == .soccer || league.family == .rugby || league.provider == .bbl ? tableName(r.short) : r.abbr)
-                                    .font(.system(size: 14, weight: .semibold))
-                                    .lineLimit(2)
-                                    .minimumScaleFactor(0.8)
-                                    .fixedSize(horizontal: false, vertical: true)
+                                // One line, never cut: the full name if it fits, else slightly smaller,
+                                // else a short form ("Dinamo Zagreb" -> "D. Zagreb").
+                                let name = league.family == .soccer || league.family == .rugby || league.provider == .bbl ? tableName(r.short) : r.abbr
+                                ViewThatFits(in: .horizontal) {
+                                    Text(name).lineLimit(1)
+                                    Text(name).lineLimit(1).font(.system(size: 12.5, weight: .semibold))
+                                    Text(shortForm(name)).lineLimit(1).minimumScaleFactor(0.8)
+                                }
+                                .font(.system(size: 14, weight: .semibold))
                                 if !hasLine { movement(live?.movement) }
                             }
                             if let t = live?.text, !t.isEmpty {

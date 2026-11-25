@@ -30,5 +30,18 @@ enum CyclingTeams {
     }
 
     static func worldTeams() async throws -> [Team] { try await list("UCI WorldTeam") }
-    static func proTeams() async throws -> [Team] { try await list("UCI ProTeam") }
+    /// ProTeams without the WorldTeams (the ProTeam article's table lists both tiers).
+    static func proTeams() async throws -> [Team] {
+        let pro = try await list("UCI ProTeam")
+        let world = (try? await worldTeams()) ?? []
+        func key(_ s: String) -> String {
+            s.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .init(identifier: "en"))
+                .components(separatedBy: CharacterSet.alphanumerics.inverted).joined()
+        }
+        let worldKeys = Set(world.map { key($0.name) })
+        return pro.filter { t in
+            let k = key(t.name)
+            return !worldKeys.contains(k) && !worldKeys.contains(where: { k.contains($0) || $0.contains(k) })
+        }
+    }
 }
