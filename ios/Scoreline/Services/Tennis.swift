@@ -509,9 +509,20 @@ enum ATPRace {
             let after = chunk.dropFirst(8).prefix(40)
             if let word = after.split(whereSeparator: { !$0.isLetter }).first { title = "Race to \(word)" }
         }
-        let tables = WikiHTML.tables(in: chunk)
-        guard let t = tables.first(where: { ($0.column("player") != nil || $0.column("name") != nil) && ($0.column("point") != nil || $0.column("pts") != nil) })
-        else { return (title, []) }
+        // The race table near "Race to …"; after the season the article only keeps the
+        // year-end ranking table, which then equals the final race.
+        func pick(_ tables: [WikiTable]) -> WikiTable? {
+            tables.first { ($0.column("player") != nil || $0.column("name") != nil) && ($0.column("point") != nil || $0.column("pts") != nil) }
+        }
+        var found = pick(WikiHTML.tables(in: chunk))
+        if found == nil {
+            if let r = lower.range(of: "ranking") {
+                let start = html.index(html.startIndex, offsetBy: lower.distance(from: lower.startIndex, to: r.lowerBound))
+                found = pick(WikiHTML.tables(in: String(html[start...])))
+            }
+            found = found ?? pick(WikiHTML.tables(in: html))
+        }
+        guard let t = found else { return (title, []) }
         let nameCol = t.column("player") ?? t.column("name") ?? 1
         let ptsCol = t.column("point") ?? t.column("pts") ?? (t.rows.first?.count ?? 1) - 1
         let entries: [Entry] = t.rows.dropFirst().enumerated().compactMap { i, r in
