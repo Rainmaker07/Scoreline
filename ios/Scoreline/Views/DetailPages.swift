@@ -621,9 +621,11 @@ struct TennisPlayerView: View {
                         if let s = info.season {
                             InfoList(title: "\(info.seasonYear) season", rows: [
                                 InfoRow(label: "Win – loss", value: "\(s.wins) – \(s.losses)"),
-                                InfoRow(label: "Titles", value: s.titles.isEmpty ? "0" : "\(s.titles.count) (\(s.titles.joined(separator: ", ")))"),
+                                InfoRow(label: "Titles", value: "\(s.titles.count)"),
                                 InfoRow(label: "Finals", value: "\(s.finals)"),
                             ])
+                            let finalsWon = s.matches.filter { $0.round == "Final" && $0.won }
+                            if !finalsWon.isEmpty { TennisTitlesCard(finals: finalsWon, year: info.seasonYear) }
                             if !s.results.isEmpty { TennisResultsCard(results: s.results, year: info.seasonYear) }
                             if !s.matches.isEmpty { TennisMatchesCard(matches: Array(s.matches.prefix(10))) }
                         }
@@ -679,7 +681,7 @@ private struct TennisResultsCard: View {
     private func row(_ r: (tournament: String, tier: TennisTier, result: String), link: Bool) -> some View {
         HStack(spacing: 8) {
             Text(r.tournament).font(.subheadline.weight(.semibold)).lineLimit(2).minimumScaleFactor(0.85)
-            TierBadge(tier: r.tier)
+            TierBadge(tier: r.tier, name: r.tournament)
             Spacer(minLength: 8)
             Text(r.result == "Won" ? "🏆 Won" : r.result)
                 .font(.subheadline.weight(r.result == "Won" ? .bold : .regular))
@@ -687,6 +689,61 @@ private struct TennisResultsCard: View {
             if link { Image(systemName: "chevron.right").font(.system(size: 10, weight: .bold)).foregroundStyle(Theme.tertiary) }
         }
         .padding(.vertical, 8)
+        .contentShape(Rectangle())
+    }
+}
+
+/// One row per title of the season: tier badge, tournament, date and the final
+/// ("d. J. Sinner 6-4 7-6"). Rows open the draw; the opponent opens their page.
+private struct TennisTitlesCard: View {
+    let finals: [Tennis.PlayerMatch]
+    let year: Int
+
+    var body: some View {
+        Loader(id: "tennis-season-\(year)", load: { (try? await Tennis.season(year)) ?? [] }) { season in
+            VStack(alignment: .leading, spacing: 0) {
+                CardTitle("Titles")
+                ForEach(Array(finals.enumerated()), id: \.element.id) { i, m in
+                    if i > 0 { Divider().overlay(Theme.separator) }
+                    let t = season.first { Tennis.cleanName($0.name) == m.tournament || $0.name == m.tournament }
+                    HStack(alignment: .top, spacing: 10) {
+                        Text("🏆").font(.title3)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Group {
+                                if let t {
+                                    NavigationLink(value: Route.tournament(t)) { titleLine(m, link: true) }.buttonStyle(.plain)
+                                } else {
+                                    titleLine(m, link: false)
+                                }
+                            }
+                            HStack(spacing: 4) {
+                                Text("\(Fmt.date(m.date)) · d.").foregroundStyle(Theme.secondary)
+                                NavigationLink(value: Route.tennisPlayer(id: m.opponentId, name: m.opponent)) {
+                                    Text(m.opponent).underline(false).foregroundStyle(.white)
+                                }
+                                .buttonStyle(.plain)
+                                .disabled(m.opponentId.isEmpty)
+                                Text(m.score).foregroundStyle(Theme.secondary).monospacedDigit()
+                            }
+                            .font(.caption)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                        }
+                    }
+                    .padding(.vertical, 8)
+                }
+            }
+            .card()
+        }
+    }
+
+    private func titleLine(_ m: Tennis.PlayerMatch, link: Bool) -> some View {
+        HStack(spacing: 6) {
+            Text(m.tournament).font(.subheadline.weight(.semibold)).lineLimit(2)
+            TierBadge(tier: m.tier, name: m.tournament)
+            Spacer(minLength: 4)
+            if link { Image(systemName: "chevron.right").font(.system(size: 10, weight: .bold)).foregroundStyle(Theme.tertiary) }
+        }
         .contentShape(Rectangle())
     }
 }
@@ -738,7 +795,7 @@ struct TennisMatchView: View {
                 VStack(spacing: 6) {
                     HStack(spacing: 6) {
                         Text(m.tournament).font(.headline)
-                        TierBadge(tier: m.tier)
+                        TierBadge(tier: m.tier, name: m.tournament)
                     }
                     Text("\(m.round) · \(Fmt.date(m.date))").font(.subheadline).foregroundStyle(Theme.secondary)
                 }

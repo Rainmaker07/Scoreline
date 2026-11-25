@@ -68,10 +68,25 @@ private struct TournamentList: View {
 
 struct TierBadge: View {
     let tier: TennisTier
+    /// Tournament name: picks the Grand Slam's own logo and the ATP Finals / Next Gen logo.
+    var name: String? = nil
+    private let height: CGFloat = 15
+
     var body: some View {
-        // Official tier logos (bundled, transparent); text badge for the other tiers.
         if let asset {
-            Image(asset).resizable().scaledToFit().frame(height: 22).frame(maxWidth: 52)
+            // Bundled ATP 250 / 500 / Masters 1000 badges, about the height of the text's capitals.
+            Image(asset).resizable().scaledToFit().frame(height: height).frame(maxWidth: 38)
+        } else if let remote {
+            CachedImage(url: remote.url) { phase in
+                if case .success(let img) = phase {
+                    img.resizable().scaledToFit()
+                        .frame(height: remote.light ? height - 2 : height).frame(maxWidth: 38)
+                        .padding(remote.light ? 1.5 : 0)
+                        .background(remote.light ? Color.white.opacity(0.9) : .clear, in: RoundedRectangle(cornerRadius: 3))
+                } else {
+                    textBadge
+                }
+            }
         } else {
             textBadge
         }
@@ -86,12 +101,26 @@ struct TierBadge: View {
         }
     }
 
+    /// Grand Slam and Finals logos (light backing for dark ones).
+    private var remote: (url: URL?, light: Bool)? {
+        let n = (name ?? "").lowercased()
+        switch tier {
+        case .slam:
+            guard let slam = Slam.all.first(where: { n.contains($0.name.lowercased()) || n.contains($0.name.split(separator: " ").first!.lowercased()) }) else { return nil }
+            return (LogoAssets.slam(slam.id), slam.id == "wim" || slam.id == "rg")
+        case .finals:
+            return (WikiLogo.url(for: n.contains("next gen") ? "Next Generation ATP Finals" : "ATP Finals"), false)
+        default:
+            return nil
+        }
+    }
+
     private var textBadge: some View {
         Text(tier.badge)
             .font(.system(size: 9, weight: .heavy))
             .foregroundStyle(Color(hex: tier.color))
             .padding(.horizontal, 5)
-            .padding(.vertical, 2)
+            .frame(height: height)
             .background(Color(hex: tier.color).opacity(0.18), in: RoundedRectangle(cornerRadius: 5))
     }
 }
@@ -106,7 +135,7 @@ private struct TournamentRow: View {
                     HStack(spacing: 6) {
                         Text(t.name).font(.subheadline.weight(.semibold))
                             .lineLimit(2).minimumScaleFactor(0.9)
-                        TierBadge(tier: t.tier)
+                        TierBadge(tier: t.tier, name: t.name)
                     }
                     Text(dates + (t.champion.map { " · 🏆 \($0)" } ?? ""))
                         .font(.caption).foregroundStyle(Theme.secondary).lineLimit(1)
@@ -132,6 +161,78 @@ private struct TournamentRow: View {
 // MARK: - Rankings
 
 private struct RankingsList: View {
+    var refresh = 0
+    @AppStorage("atpRankingKind") private var kind = 0   // 0 ATP Rankings, 1 Race
+    @State private var raceTitle = "Race to Turin"
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            TextTabs(items: [0, 1], selection: $kind) { $0 == 0 ? "ATP Rankings" : raceTitle }
+            if kind == 0 { ATPRankingsList(refresh: refresh) } else { RaceList(refresh: refresh, title: $raceTitle) }
+        }
+    }
+}
+
+/// Year-to-date race to the ATP Finals; the top 8 qualify.
+private struct RaceList: View {
+    var refresh = 0
+    @Binding var title: String
+    private var year: Int { Calendar.current.component(.year, from: Date()) }
+
+    var body: some View {
+        Loader(id: "atp-race-\(year)-\(refresh)", load: { () async throws -> (title: String, entries: [ATPRace.Entry], ids: [String: String], photos: [String: URL]) in
+            let race = try await ATPRace.load(year: year)
+            // ESPN ids and headshots from the 52-week ranking, matched by name.
+            let ranks = (try? await Tennis.rankings()) ?? []
+            var ids: [String: String] = [:], photos: [String: URL] = [:]
+            for r in ranks { ids[r.name.lowercased()] = r.playerId; if let h = r.headshot { photos[r.name.lowercased()] = h } }
+            return (race.title, race.entries, ids, photos)
+        }) { race in
+            if race.entries.isEmpty {
+                MessageCard(text: "The \(race.title) table isn’t on Wikipedia right now.")
+            } else {
+                VStack(alignment: .leading, spacing: 0) {
+                    CardTitle(race.title)
+                    ForEach(Array(race.entries.enumerated()), id: \.element.id) { i, e in
+                        if i == 8 {
+                            HStack(spacing: 6) {
+                                Rectangle().fill(Color.white.opacity(0.5)).frame(height: 1.5)
+                                Text("FINALS QUALIFICATION").font(.system(size: 9, weight: .bold)).foregroundStyle(Theme.secondary)
+                                    .fixedSize()
+                                Rectangle().fill(Color.white.opacity(0.5)).frame(height: 1.5)
+                            }
+                            .padding(.vertical, 4)
+                        } else if i > 0 {
+                            Divider().overlay(Theme.separator)
+                        }
+                        NavigationLink(value: Route.tennisPlayer(id: race.ids[e.name.lowercased()] ?? "", name: e.name)) {
+                            HStack(spacing: 10) {
+                                Text("\(e.rank)").font(.subheadline.weight(.bold)).monospacedDigit().frame(width: 30, alignment: .leading)
+                                TennisPhoto(name: e.name, espn: race.photos[e.name.lowercased()], size: 30)
+                                Text(e.name).font(.subheadline.weight(.semibold)).lineLimit(1)
+                                if e.qualified {
+                                    Text("Q").font(.system(size: 10, weight: .heavy)).foregroundStyle(.black)
+                                        .frame(width: 16, height: 16).background(Theme.win, in: Circle())
+                                }
+                                Spacer()
+                                Text(e.points).font(.subheadline).monospacedDigit().foregroundStyle(Theme.secondary)
+                            }
+                            .padding(.vertical, 8)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    Text("Year-to-date points (Wikipedia). The top 8 qualify for the ATP Finals.")
+                        .font(.caption2).foregroundStyle(Theme.tertiary).padding(.top, 6)
+                }
+                .card(padding: 14)
+                .onAppear { title = race.title }
+            }
+        }
+    }
+}
+
+private struct ATPRankingsList: View {
     var refresh = 0
     @State private var limit = 50
     @EnvironmentObject private var store: AppStore
@@ -159,7 +260,12 @@ private struct RankingsList: View {
                                     CachedImage(url: f) { $0.resizable().scaledToFill() } placeholder: { Theme.card2 }
                                         .frame(width: 20, height: 14).clipShape(RoundedRectangle(cornerRadius: 2))
                                 }
-                                Text(r.name).font(.subheadline.weight(.semibold)).lineLimit(1).minimumScaleFactor(0.75)
+                                // Same size for every name; long ones use the first initial ("A. Zverev").
+                                ViewThatFits(in: .horizontal) {
+                                    Text(r.name).lineLimit(1)
+                                    Text(shortForm(r.name)).lineLimit(1)
+                                }
+                                .font(.subheadline.weight(.semibold))
                                 if starred.contains(r.name.lowercased()) {
                                     Image(systemName: "star.fill").font(.system(size: 10)).foregroundStyle(.yellow)
                                 }
@@ -239,7 +345,7 @@ private struct DrawBody: View {
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 8) {
                         Text(Tennis.cleanName(event.name)).font(.title3.weight(.heavy)).lineLimit(2).minimumScaleFactor(0.8)
-                        TierBadge(tier: summary.tier)
+                        TierBadge(tier: summary.tier, name: summary.name)
                     }
                     // Main-draw dates from the season index (ESPN's event dates include qualifying).
                     if let s = Optional(summary.start), let e = Optional(summary.end) {

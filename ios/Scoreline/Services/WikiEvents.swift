@@ -102,7 +102,7 @@ enum LaverCup {
 
 // MARK: - Davis Cup
 
-struct DavisTie: Identifiable {
+struct DavisTie: Identifiable, Hashable {
     let id: Int
     let round: String
     let teamA: String
@@ -111,6 +111,71 @@ struct DavisTie: Identifiable {
     let rubbers: [[String]]
 
     var decided: Bool { teamA != "TBD" && teamB != "TBD" }
+
+    /// Rubbers parsed into players and set scores.
+    var parsed: [DavisRubber] { rubbers.compactMap(DavisRubber.init) }
+    /// Rubbers won by each team.
+    var score: (a: Int, b: Int) {
+        parsed.reduce(into: (0, 0)) { acc, r in
+            if r.winner == 0 { acc.0 += 1 } else if r.winner == 1 { acc.1 += 1 }
+        }
+    }
+    var winner: Int? {
+        let s = score
+        let needed = max(2, parsed.count / 2 + 1)
+        return s.a >= needed ? 0 : s.b >= needed ? 1 : nil
+    }
+    /// Short codes ("ITA") for compact bracket cells.
+    var codeA: String { DavisCup.codes[teamA.lowercased()]?.uppercased() ?? String(teamA.prefix(3)).uppercased() }
+    var codeB: String { DavisCup.codes[teamB.lowercased()]?.uppercased() ?? String(teamB.prefix(3)).uppercased() }
+}
+
+/// One rubber: number, players of each side (doubles as two names) and the sets.
+struct DavisRubber: Hashable {
+    let number: Int
+    let playersA: [String]
+    let playersB: [String]
+    let sets: [(Int, Int, Int?)]   // games A, games B, tiebreak points of the loser
+
+    static func == (a: DavisRubber, b: DavisRubber) -> Bool { a.number == b.number && a.playersA == b.playersA }
+    func hash(into h: inout Hasher) { h.combine(number); h.combine(playersA) }
+
+    var doubles: Bool { playersA.count > 1 || playersB.count > 1 }
+    /// 0 team A, 1 team B, nil not finished.
+    var winner: Int? {
+        let a = sets.filter { $0.0 > $0.1 }.count, b = sets.filter { $0.1 > $0.0 }.count
+        let best = doubles ? 2 : 2
+        return a >= best ? 0 : b >= best ? 1 : nil
+    }
+
+    init?(_ cells: [String]) {
+        var numbers: [String] = []
+        var names: [String] = []
+        var sets: [(Int, Int, Int?)] = []
+        for c in cells {
+            let t = c.trimmingCharacters(in: .whitespaces)
+            if t.isEmpty { continue }
+            // "6–4", "7–6(5)", "7–6⁵" or several sets in one cell.
+            let setMatches = t.matches(of: #/(\d{1,2})\s*[–\-]\s*(\d{1,2})(?:\s*\((\d{1,2})\))?/#)
+            if !setMatches.isEmpty, t.filter(\.isLetter).isEmpty {
+                for m in setMatches {
+                    if let a = Int(m.1), let b = Int(m.2), a <= 7, b <= 7 { sets.append((a, b, m.3.flatMap { Int($0) })) }
+                }
+            } else if Int(t) != nil && t.count <= 2 && names.isEmpty {
+                numbers.append(t)
+            } else if t.filter(\.isLetter).count >= 2 {
+                names.append(t)
+            }
+        }
+        guard names.count >= 2 else { return nil }
+        func players(_ s: String) -> [String] {
+            s.components(separatedBy: CharacterSet(charactersIn: "/&")).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        }
+        self.number = Int(numbers.first ?? "") ?? 0
+        self.playersA = players(names[0])
+        self.playersB = players(names[1])
+        self.sets = sets
+    }
 }
 
 enum DavisCup {

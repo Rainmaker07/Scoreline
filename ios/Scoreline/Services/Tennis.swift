@@ -482,3 +482,49 @@ extension ESPN {
     static let tennisRoundOrder = ["Group Stage", "Round Robin", "Round 1", "Round 2", "Round 3", "Round 4", "Round 5",
                                    "Quarterfinal", "Semifinal", "Final"]
 }
+
+/// The year-to-date race to the ATP Finals ("PIF ATP Race to Turin"), from the ranking
+/// tables of Wikipedia's "<year> ATP Tour" article (ESPN only has the 52-week ranking).
+enum ATPRace {
+    struct Entry: Identifiable, Hashable {
+        var id: String { name }
+        let rank: Int
+        let name: String
+        let country: String?
+        let points: String
+        let qualified: Bool
+    }
+
+    /// Title ("Race to Turin") and the race table.
+    static func load(year: Int) async throws -> (title: String, entries: [Entry]) {
+        guard let url = CyclingService.wikiURL("\(year) ATP Tour") else { return ("Race", []) }
+        let html = try await HTTP.shared.text(url, maxAge: 21_600)
+        // The race section: a heading with "Race to …".
+        let lower = html.lowercased()
+        var title = "Race to Turin"
+        var chunk = html
+        if let r = lower.range(of: "race to ") {
+            let start = html.index(html.startIndex, offsetBy: lower.distance(from: lower.startIndex, to: r.lowerBound))
+            chunk = String(html[start...])
+            let after = chunk.dropFirst(8).prefix(40)
+            if let word = after.split(whereSeparator: { !$0.isLetter }).first { title = "Race to \(word)" }
+        }
+        let tables = WikiHTML.tables(in: chunk)
+        guard let t = tables.first(where: { ($0.column("player") != nil || $0.column("name") != nil) && ($0.column("point") != nil || $0.column("pts") != nil) })
+        else { return (title, []) }
+        let nameCol = t.column("player") ?? t.column("name") ?? 1
+        let ptsCol = t.column("point") ?? t.column("pts") ?? (t.rows.first?.count ?? 1) - 1
+        let entries: [Entry] = t.rows.dropFirst().enumerated().compactMap { i, r in
+            guard r.count > max(nameCol, ptsCol) else { return nil }
+            let (name, country) = CyclingService.splitRider(r[nameCol])
+            let clean = name.replacingOccurrences(of: #"[\*†‡]|\(Q\)|\[.*?\]"#, with: "", options: .regularExpression)
+                .trimmingCharacters(in: .whitespaces)
+            guard !clean.isEmpty else { return nil }
+            let rank = Int(r.first?.filter(\.isNumber) ?? "") ?? i + 1
+            // Qualified players are marked "(Q)" or have a cell that is just "Q".
+            let q = r[nameCol].contains("(Q)") || r.contains("Q") || r.contains { $0.lowercased() == "qualified" }
+            return Entry(rank: rank, name: clean, country: country, points: r[ptsCol], qualified: q)
+        }
+        return (title, entries)
+    }
+}
