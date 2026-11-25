@@ -96,7 +96,7 @@ struct GameHero: View {
             LiveActivityButton(game: game)
         }
         .padding(.horizontal, 16)
-        .padding(.top, embedded ? 8 : 18)
+        .padding(.top, embedded ? 8 : 30)
         .padding(.bottom, 22)
         .background(LinearGradient(colors: [lc, .black, rc], startPoint: .topLeading, endPoint: .bottomTrailing))
     }
@@ -253,15 +253,22 @@ private struct BBLGameDetailContent: View {
                 if tab == .stats, let lm = detail.teamStats[left.id], let rm = detail.teamStats[right.id] {
                     TeamStatsBars(league: league, left: left, right: right, lm: lm, rm: rm)
                 }
+                if tab == .summary {
+                    BBLLeadersCard(detail: detail, left: left, right: right)
+                }
                 if tab == .box { ForEach([left, right], id: \.id) { side in
                     if let players = detail.box[side.id], !players.isEmpty {
+                        let order = BoxScoreCards.order(BBL.boxLabels, preferred: ["MIN", "PTS", "REB", "AST", "FG", "3PT", "+/-", "EFF", "FT", "STL", "BLK", "TO", "PF"])
+                        let pick: ([String]) -> [String] = { row in order.map { $0 < row.count ? row[$0] : "" } }
                         BoxTable(
                             title: side.short + (detail.coaches[side.id].map { " · Coach \($0)" } ?? ""),
                             logo: side.logo, abbr: side.abbr,
-                            labels: BBL.boxLabels,
+                            labels: pick(BBL.boxLabels),
                             rows: players.map { p in
-                                BoxRow(id: p.id, name: p.name, sub: "#\(p.number)", bench: !p.starter, stats: p.stats,
-                                       route: .player(leagueId: "bbl", playerId: p.id))
+                                BoxRow(id: p.id, name: p.name, sub: p.position.isEmpty ? "#\(p.number)" : p.position,
+                                       bench: !p.starter, stats: p.played ? pick(p.stats) : [],
+                                       note: p.played ? nil : "DNP",
+                                       route: .player(leagueId: "bbl", playerId: p.id), headshot: p.headshot)
                             },
                             totals: []
                         )
@@ -538,10 +545,21 @@ struct StatBar: View {
 
 // MARK: - Box score
 
-private struct BoxScoreCards: View {
+struct BoxScoreCards: View {
     let league: League
     let summary: J
     let side: Side
+
+    /// Most useful columns first; the rest follow in ESPN's order (swipe sideways).
+    private static let preferred: [String: [String]] = [
+        "basketball": ["MIN", "PTS", "REB", "AST", "FG", "3PT", "+/-", "FT", "STL", "BLK", "TO", "PF", "OREB", "DREB"],
+        "batting": ["AB", "R", "H", "RBI", "BB", "K", "AVG", "HR", "OBP", "SLG"],
+        "pitching": ["IP", "H", "R", "ER", "BB", "K", "HR", "ERA", "PC-ST"],
+    ]
+    private static let dropped: Set<String> = ["H-AB"]
+    private static let leaderColumns: [String: Set<String>] = [
+        "basketball": ["PTS", "REB", "AST"], "batting": ["H", "RBI", "HR"], "pitching": ["K"],
+    ]
 
     var body: some View {
         let p = summary["boxscore"]["players"].array.first { $0["team"]["id"].str == side.id }
@@ -549,27 +567,49 @@ private struct BoxScoreCards: View {
             ForEach(Array(p["statistics"].array.enumerated()), id: \.offset) { _, grp in
                 let athletes = grp["athletes"].array
                 if !athletes.isEmpty {
+                    let kind = league.family == .basketball ? "basketball" : (grp["type"].str.lowercased().contains("pitch") ? "pitching" : "batting")
+                    let labels = grp["labels"].array.map(\.str)
+                    let order = Self.order(labels, preferred: Self.preferred[kind] ?? [])
+                    let pick: ([String]) -> [String] = { row in order.map { $0 < row.count ? row[$0] : "" } }
+                    let sections: (String, String) = kind == "pitching" ? ("Starter", "Bullpen")
+                        : kind == "batting" ? ("Lineup", "Substitutes") : ("Starters", "Bench")
                     BoxTable(
-                        title: side.short + (grp["type"].string.map { " · \($0.capitalized)" } ?? ""),
+                        title: side.short + (league.family == .baseball ? " · \(kind.capitalized)" : ""),
                         logo: side.logo, abbr: side.abbr,
-                        labels: grp["labels"].array.map(\.str),
+                        labels: pick(labels),
                         rows: athletes.map { a in
                             let stats = a["stats"].array.map(\.str)
+                            let dnp = stats.isEmpty || a["didNotPlay"].bool == true
                             return BoxRow(
                                 id: a["athlete"]["id"].str,
                                 name: a["athlete"]["shortName"].string ?? a["athlete"]["displayName"].str,
-                                sub: a["position"]["abbreviation"].str,
+                                sub: a["athlete"]["position"]["abbreviation"].string ?? a["position"]["abbreviation"].str,
                                 bench: a["starter"].bool == false,
-                                stats: stats,
-                                note: stats.isEmpty ? (a["reason"].string.flatMap { $0.isEmpty ? nil : $0 } ?? "DNP") : nil,
-                                route: .player(leagueId: league.id, playerId: a["athlete"]["id"].str)
+                                stats: dnp ? [] : pick(stats),
+                                note: dnp ? Self.dnpText(a["reason"].string) : nil,
+                                route: .player(leagueId: league.id, playerId: a["athlete"]["id"].str),
+                                headshot: a["athlete"]["headshot"]["href"].url
                             )
                         },
-                        totals: grp["totals"].array.map(\.str)
+                        totals: grp["totals"].array.isEmpty ? [] : pick(grp["totals"].array.map(\.str)),
+                        sectionTitles: sections,
+                        leaderColumns: Self.leaderColumns[kind] ?? []
                     )
                 }
             }
         }
+    }
+
+    static func order(_ labels: [String], preferred: [String]) -> [Int] {
+        var out = preferred.compactMap { labels.firstIndex(of: $0) }
+        for i in labels.indices where !out.contains(i) && !dropped.contains(labels[i]) { out.append(i) }
+        return out
+    }
+
+    static func dnpText(_ reason: String?) -> String {
+        guard let r = reason?.trimmingCharacters(in: .whitespaces), !r.isEmpty else { return "DNP" }
+        return "DNP · " + r.lowercased().capitalized(with: Locale(identifier: "en"))
+            .replacingOccurrences(of: "Coach'S", with: "Coach's")
     }
 }
 
@@ -581,9 +621,11 @@ struct BoxRow: Identifiable {
     let stats: [String]
     var note: String? = nil
     let route: Route?
+    var headshot: URL? = nil
 }
 
-/// Player stat table: names pinned on the left, stats scroll sideways.
+/// Player stat table: starters and bench sections, names pinned on the left with
+/// position, stats scroll sideways; players who didn't play are listed compactly.
 struct BoxTable: View {
     let title: String
     let logo: URL?
@@ -591,28 +633,77 @@ struct BoxTable: View {
     let labels: [String]
     let rows: [BoxRow]
     let totals: [String]
+    var sectionTitles: (String, String) = ("Starters", "Bench")
+    var leaderColumns: Set<String> = ["PTS", "REB", "AST"]
 
-    private let rowHeight: CGFloat = 34
+    private let rowHeight: CGFloat = 32
+    private let headerHeight: CGFloat = 26
+
+    private enum Line: Identifiable {
+        case header(String)
+        case player(BoxRow, shaded: Bool)
+        var id: String {
+            switch self {
+            case .header(let t): return "h-" + t
+            case .player(let r, _): return r.id
+            }
+        }
+    }
+
+    private var played: [BoxRow] { rows.filter { $0.note == nil } }
+    private var dnp: [BoxRow] { rows.filter { $0.note != nil } }
+
+    private var lines: [Line] {
+        let starters = played.filter { !$0.bench }
+        let bench = played.filter(\.bench)
+        var out: [Line] = []
+        let sectioned = !starters.isEmpty && !bench.isEmpty
+        if sectioned { out.append(.header(sectionTitles.0)) }
+        out += starters.enumerated().map { .player($0.element, shaded: $0.offset % 2 == 1) }
+        if sectioned { out.append(.header(sectionTitles.1)) }
+        out += bench.enumerated().map { .player($0.element, shaded: $0.offset % 2 == 1) }
+        return out
+    }
+
+    /// Highest value per leader column (bolded in the table).
+    private var maxima: [Int: Double] {
+        var out: [Int: Double] = [:]
+        for (i, l) in labels.enumerated() where leaderColumns.contains(l) {
+            let best = played.compactMap { i < $0.stats.count ? Double($0.stats[i]) : nil }.max() ?? 0
+            if best > 0 { out[i] = best }
+        }
+        return out
+    }
+
+    private var hasPhotos: Bool { rows.contains { $0.headshot != nil } }
 
     var body: some View {
+        let lines = self.lines
+        let maxima = self.maxima
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
-                LogoView(url: logo, fallback: abbr, size: 18)
+                LogoView(url: logo, fallback: abbr, size: 20)
                 CardTitle(title)
             }
             HStack(alignment: .top, spacing: 0) {
                 // Names column (tappable)
                 VStack(alignment: .leading, spacing: 0) {
-                    Text("Player").font(.caption2.weight(.semibold)).foregroundStyle(Theme.secondary)
-                        .frame(height: 24, alignment: .leading)
-                    ForEach(rows) { r in
-                        nameCell(r).frame(height: rowHeight, alignment: .leading)
+                    Text("").frame(height: 22)
+                    ForEach(lines) { line in
+                        switch line {
+                        case .header(let t):
+                            sectionHeader(t)
+                        case .player(let r, let shaded):
+                            nameCell(r).frame(height: rowHeight, alignment: .leading)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(shaded ? Color.white.opacity(0.04) : .clear)
+                        }
                     }
                     if !totals.isEmpty {
                         Text("Team").font(.footnote.weight(.bold)).frame(height: rowHeight, alignment: .leading)
                     }
                 }
-                .frame(width: 128, alignment: .leading)
+                .frame(width: hasPhotos ? 140 : 118, alignment: .leading)
                 ScrollView(.horizontal, showsIndicators: false) {
                     VStack(alignment: .trailing, spacing: 0) {
                         HStack(spacing: 0) {
@@ -620,17 +711,21 @@ struct BoxTable: View {
                         }
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(Theme.secondary)
-                        .frame(height: 24)
-                        ForEach(rows) { r in
-                            HStack(spacing: 0) {
-                                if let note = r.note {
-                                    Text(note).foregroundStyle(Theme.secondary).frame(maxWidth: .infinity, alignment: .leading)
-                                } else {
-                                    ForEach(Array(r.stats.enumerated()), id: \.offset) { cell($0.element) }
+                        .frame(height: 22)
+                        ForEach(lines) { line in
+                            switch line {
+                            case .header:
+                                Color.clear.frame(height: headerHeight)
+                            case .player(let r, let shaded):
+                                HStack(spacing: 0) {
+                                    ForEach(Array(r.stats.enumerated()), id: \.offset) { i, v in
+                                        cell(v, bold: maxima[i].map { Double(v) == $0 } ?? false)
+                                    }
                                 }
+                                .font(.footnote)
+                                .frame(height: rowHeight)
+                                .background(shaded ? Color.white.opacity(0.04) : .clear)
                             }
-                            .font(.footnote)
-                            .frame(height: rowHeight)
                         }
                         if !totals.isEmpty {
                             HStack(spacing: 0) {
@@ -643,21 +738,61 @@ struct BoxTable: View {
                     .monospacedDigit()
                 }
             }
+            if let pct = shootingLine {
+                Text(pct).font(.caption).foregroundStyle(Theme.secondary).monospacedDigit()
+            }
+            if !dnp.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    Divider().overlay(Theme.separator).padding(.vertical, 4)
+                    ForEach(dnp) { r in
+                        HStack(spacing: 6) {
+                            Text(r.name).font(.caption.weight(.semibold))
+                            Text(r.note ?? "").font(.caption).foregroundStyle(Theme.tertiary).lineLimit(1)
+                        }
+                        .foregroundStyle(Theme.secondary)
+                    }
+                }
+            }
         }
         .card()
     }
 
-    private func cell(_ t: String) -> some View {
-        Text(t).lineLimit(1).frame(minWidth: 44, alignment: .trailing).padding(.horizontal, 2)
+    /// "FG 48.1% · 3PT 38.5% · FT 80.0%" from the team totals.
+    private var shootingLine: String? {
+        let parts: [String] = ["FG", "3PT", "FT"].compactMap { key in
+            guard let i = labels.firstIndex(of: key), i < totals.count else { return nil }
+            let n = totals[i].split(separator: "-").compactMap { Double($0) }
+            guard n.count == 2, n[1] > 0 else { return nil }
+            return String(format: "%@ %.1f%%", key, n[0] / n[1] * 100)
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    private func sectionHeader(_ t: String) -> some View {
+        Text(t.uppercased())
+            .font(.caption2.weight(.bold)).foregroundStyle(Theme.secondary)
+            .frame(height: headerHeight, alignment: .bottomLeading)
+            .padding(.bottom, 2)
+    }
+
+    private func cell(_ t: String, bold: Bool = false) -> some View {
+        Text(t).lineLimit(1)
+            .fontWeight(bold ? .heavy : nil)
+            .frame(minWidth: 38, alignment: .trailing).padding(.horizontal, 2)
     }
 
     @ViewBuilder private func nameCell(_ r: BoxRow) -> some View {
-        let label = HStack(spacing: 4) {
-            Text(r.name).lineLimit(1).minimumScaleFactor(0.8)
-            Text(r.sub).font(.caption2).foregroundStyle(Theme.secondary)
+        let label = HStack(spacing: 6) {
+            if hasPhotos {
+                CachedImage(url: r.headshot) { img in img.resizable().scaledToFill() } placeholder: { Theme.card2 }
+                    .frame(width: 22, height: 22).background(Theme.card2).clipShape(Circle())
+            }
+            Text(r.name).lineLimit(1).minimumScaleFactor(0.75)
+            if !r.sub.isEmpty {
+                Text(r.sub).font(.system(size: 10, weight: .semibold)).foregroundStyle(Theme.secondary)
+            }
         }
-        .font(.footnote)
-        .foregroundStyle(r.bench ? Theme.secondary : .white)
+        .font(.footnote.weight(.medium))
         if let route = r.route {
             NavigationLink(value: route) { label }.buttonStyle(.plain)
         } else {
@@ -667,6 +802,96 @@ struct BoxTable: View {
 }
 
 // MARK: - Leaders / decisions
+
+/// BBL game leaders (points, rebounds, assists) from the box score; before tip-off,
+/// each team's season leaders from the BBL statistics page.
+private struct BBLLeadersCard: View {
+    let detail: BBL.GameDetail
+    let left: Side
+    let right: Side
+
+    private struct Leader { let id: String; let name: String; let position: String; let photo: URL?; let value: String }
+    private static let cats: [(label: String, index: Int, season: String)] = [
+        ("Points", 1, "pointsPerGame"), ("Rebounds", 5, "totalReboundsPerGame"), ("Assists", 6, "assistsPerGame"),
+    ]
+
+    private func gameLeader(_ teamId: String, _ idx: Int) -> Leader? {
+        let players = (detail.box[teamId] ?? []).filter(\.played)
+        guard let best = players.max(by: { (Int($0.stats[idx]) ?? 0) < (Int($1.stats[idx]) ?? 0) }),
+              (Int(best.stats[idx]) ?? 0) > 0 else { return nil }
+        return Leader(id: best.id, name: best.name, position: best.position, photo: best.headshot, value: best.stats[idx])
+    }
+
+    var body: some View {
+        let started = detail.game.state != .pre && !(detail.box[left.id] ?? []).filter(\.played).isEmpty
+        if started {
+            card(title: "Game Leaders", rows: Self.cats.map { c in (c.label, gameLeader(left.id, c.index), gameLeader(right.id, c.index)) })
+        } else {
+            Loader(id: "bbl-season-leaders", load: { try await BBL.seasonPlayerRows() }) { rows in
+                card(title: "Season Leaders", rows: Self.cats.map { c in
+                    (c.label + " per game", seasonLeader(rows, side: left, key: c.season), seasonLeader(rows, side: right, key: c.season))
+                })
+            }
+        }
+    }
+
+    private func seasonLeader(_ rows: [J], side: Side, key: String) -> Leader? {
+        let mine = rows.filter { r in
+            let t = r["seasonTeam"]
+            return t["id"].str == side.id || t["teamId"].str == side.id
+                || FotMobMatch.sameTeam(t["name"].str, side.name)
+        }
+        guard let best = mine.max(by: { ($0[key].double ?? 0) < ($1[key].double ?? 0) }) else { return nil }
+        let p = best["seasonPlayer"]
+        return Leader(id: p["playerId"].string ?? p["id"].str,
+                      name: "\(p["firstName"].str.prefix(1)). \(p["lastName"].str)",
+                      position: p["position"].string.map(BBL.positionShort) ?? "",
+                      photo: p["imageUrl"].url, value: String(format: "%.1f", best[key].double ?? 0))
+    }
+
+    @ViewBuilder private func card(title: String, rows: [(String, Leader?, Leader?)]) -> some View {
+        if rows.contains(where: { $0.1 != nil || $0.2 != nil }) {
+            VStack(alignment: .leading, spacing: 12) {
+                CardTitle(title)
+                ForEach(rows, id: \.0) { r in
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(r.0).font(.caption.weight(.semibold)).foregroundStyle(Theme.secondary)
+                        HStack {
+                            leader(r.1, trailing: false)
+                            Spacer()
+                            leader(r.2, trailing: true)
+                        }
+                    }
+                }
+            }
+            .card()
+        }
+    }
+
+    @ViewBuilder private func leader(_ l: Leader?, trailing: Bool) -> some View {
+        if let l {
+            NavigationLink(value: Route.player(leagueId: "bbl", playerId: l.id)) {
+                HStack(spacing: 8) {
+                    if !trailing { photo(l) }
+                    VStack(alignment: trailing ? .trailing : .leading, spacing: 1) {
+                        HStack(spacing: 4) {
+                            Text(l.name).font(.subheadline.weight(.bold)).lineLimit(1)
+                            if !l.position.isEmpty { Text(l.position).font(.caption2).foregroundStyle(Theme.secondary) }
+                        }
+                        Text(l.value).font(.title3.weight(.heavy)).monospacedDigit()
+                    }
+                    if trailing { photo(l) }
+                }
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private func photo(_ l: Leader) -> some View {
+        CachedImage(url: l.photo) { img in img.resizable().scaledToFill() } placeholder: { Theme.card2 }
+            .frame(width: 36, height: 36).background(Theme.card2).clipShape(Circle())
+    }
+}
 
 private struct GameLeadersCard: View {
     let league: League

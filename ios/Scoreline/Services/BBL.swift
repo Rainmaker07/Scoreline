@@ -185,6 +185,9 @@ enum BBL {
         let number: String
         let starter: Bool
         let stats: [String]
+        var position: String = ""
+        var headshot: URL? = nil
+        var played: Bool = true
     }
 
     struct GameDetail {
@@ -245,7 +248,10 @@ enum BBL {
                     name: "\(sp["firstName"].str.prefix(1)). \(sp["lastName"].str)",
                     number: p["shirtNumber"].string ?? sp["shirtNumber"].str,
                     starter: p["isStartingFive"].bool ?? false,
-                    stats: boxLine(p)
+                    stats: boxLine(p),
+                    position: sp["position"].string.map(positionShort) ?? "",
+                    headshot: sp["imageUrl"].url,
+                    played: (p["secondsPlayed"].int ?? 0) > 0
                 )
             }.sorted { ($0.starter ? 0 : 1, -(Int($0.stats[1]) ?? 0)) < ($1.starter ? 0 : 1, -(Int($1.stats[1]) ?? 0)) }
             if let c = t["headCoachName"].string { coaches[tid] = c }
