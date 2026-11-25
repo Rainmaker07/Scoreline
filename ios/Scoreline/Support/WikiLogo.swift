@@ -35,7 +35,7 @@ enum WikiLogo {
 
     // MARK: Logos of events (tennis tournaments, cycling races)
 
-    private static var cache: [String: URL?] = [:]
+    private static let cache = LockedCache<String, URL?>()
 
     static func articleURL(_ title: String, lang: String) -> URL? {
         let allowed = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~()'!")

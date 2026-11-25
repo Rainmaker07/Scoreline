@@ -88,7 +88,7 @@ enum TournamentLogos {
         return titles.first { n.contains($0.0) }?.1 ?? name
     }
 
-    private static var cache: [String: URL?] = [:]
+    private static let cache = LockedCache<String, URL?>()
 
     static func articleTitle(_ t: TournamentSummary) -> String { wikiTitle(t.name) }
 
@@ -194,7 +194,7 @@ struct RankingEntry: Identifiable, Hashable {
 }
 
 enum Tennis {
-    private static var indexCache: [Int: (date: Date, list: [TournamentSummary])] = [:]
+    private static let indexCache = LockedCache<Int, (date: Date, list: [TournamentSummary])>()
 
     /// Every ATP tournament in a season (singles champion when finished).
     /// The source is large (~20 MB), so it's cached and parsed off the main thread.

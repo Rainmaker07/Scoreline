@@ -445,7 +445,7 @@ struct PreparedLogo {
 /// Looks at a logo once: trims empty or white margins, and decides whether it needs a
 /// light tile (no transparency, or dark artwork that would vanish on a dark card).
 enum LogoPrep {
-    private static var cache: [String: PreparedLogo] = [:]
+    private static let cache = LockedCache<String, PreparedLogo>()
 
     static func prepare(_ img: UIImage, key: String) async -> PreparedLogo {
         if let hit = cache[key] { return hit }

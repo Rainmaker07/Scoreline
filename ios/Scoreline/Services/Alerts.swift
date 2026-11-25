@@ -90,7 +90,10 @@ final class AlertEngine: ObservableObject {
             out.append(AlertSubscription(kind: .competition, leagueId: id, entityId: id, name: League.byId(id)?.name ?? id,
                                          prefs: store.alertPrefs["league:\(id)"] ?? .competitionDefault))
         }
-        return out
+        // Alerts for hidden (unfollowed) leagues pause; their settings stay saved.
+        // Tennis players and riders belong to the "atp" / "cycling" leagues.
+        let hidden = store.hiddenLeagues
+        return out.filter { !hidden.contains($0.leagueId) }
     }
 
     // MARK: Refresh (foreground timer and background task)

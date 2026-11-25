@@ -2,7 +2,7 @@ import Foundation
 
 /// Football player headshots from FotMob (ESPN has none).
 enum FotMob {
-    private static var cache: [String: URL?] = [:]
+    private static let cache = LockedCache<String, URL?>()
 
     static func photo(name: String, team: String) async -> URL? {
         let key = "\(name)|\(team)"
@@ -56,7 +56,7 @@ enum FotMob {
 /// Finds a player photo: the given headshot if it loads, else FotMob (football),
 /// else the Wikipedia lead image. Results are remembered per player.
 enum PlayerPhotos {
-    private static var cache: [String: URL?] = [:]
+    private static let cache = LockedCache<String, URL?>()
 
     static func best(primary: URL?, name: String, team: String, football: Bool) async -> URL? {
         let key = "\(name)|\(team)"

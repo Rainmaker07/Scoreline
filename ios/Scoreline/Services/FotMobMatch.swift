@@ -80,7 +80,7 @@ enum FotMobMatch {
         return !shared.subtracting(generic).isEmpty || (!shared.isEmpty && wa == wb)
     }
 
-    private static var idCache: [String: Int] = [:]
+    private static let idCache = LockedCache<String, Int>()
 
     static func matchId(for game: Game) async -> Int? {
         if let hit = idCache[game.id] { return hit }

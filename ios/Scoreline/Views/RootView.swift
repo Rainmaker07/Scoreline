@@ -8,6 +8,7 @@ struct RootView: View {
     @State private var menuOpen = false
     @State private var path = NavigationPath()
     @State private var sheet: MenuSheet?
+    @State private var showCrashBanner = false
 
     private var league: League? { League.byId(selected) }
 
@@ -52,7 +53,18 @@ struct RootView: View {
             .navigationDestination(for: Route.self) { RouteView(route: $0) }
         }
         .environment(\.pageColor, league?.color ?? "1c2a4a")
+        .onChange(of: selected) { _, id in CrashLog.crumb("League menu → \(id)") }
+        .onChange(of: openGame?.id) { _, id in if let id, let g = openGame { CrashLog.crumb("Game sheet \(g.leagueId)/\(id)") } }
+        .onChange(of: menuOpen) { _, open in CrashLog.crumb(open ? "League menu opened" : "League menu closed") }
+        .alert("Scoreline crashed last time", isPresented: $showCrashBanner) {
+            Button("View report") { sheet = .settings; CrashLog.markSeen() }
+            Button("Later", role: .cancel) { CrashLog.markSeen() }
+        } message: {
+            Text("A crash report was saved. You can copy or share it from Settings → Crash Log.")
+        }
         .task {
+            if CrashLog.hasUnseen { showCrashBanner = true }
+            CrashLog.crumb("Launch, league \(selected)")
             // Launch options used by the GitHub build (see ScreenshotMode).
             let d = UserDefaults.standard
             if d.bool(forKey: "runDataChecks") { await DataChecks.runForCI(); return }
@@ -361,37 +373,111 @@ struct LeagueStatusText: View {
     }
 }
 
+/// Following (shown leagues, in your order) and More to Follow (hidden leagues).
+/// Tap the star to follow or unfollow; alerts for unfollowed leagues pause.
 struct EditLeaguesView: View {
     @EnvironmentObject private var store: AppStore
     @Environment(\.dismiss) private var dismiss
+
+    private var following: [League] { store.orderedLeagues.filter { !store.hiddenLeagues.contains($0.id) } }
+    private var more: [League] { store.orderedLeagues.filter { store.hiddenLeagues.contains($0.id) } }
 
     var body: some View {
         NavigationStack {
             List {
                 Section {
-                    ForEach(store.orderedLeagues) { l in
-                        HStack(spacing: 12) {
-                            LeagueIcon(league: l, size: 26)
-                            Text(l.name)
-                            Spacer()
-                            Toggle("", isOn: Binding(
-                                get: { !store.hiddenLeagues.contains(l.id) },
-                                set: { on in
-                                    if on { store.hiddenLeagues.remove(l.id) } else { store.hiddenLeagues.insert(l.id) }
-                                }
-                            ))
-                            .labelsHidden()
-                        }
+                    ForEach(following) { l in
+                        row(l, followed: true)
                     }
-                    .onMove { from, to in store.leagueOrder.move(fromOffsets: from, toOffset: to) }
+                    .onMove { from, to in
+                        // Reorder within Following, keeping hidden leagues where they are.
+                        var ids = following.map(\.id)
+                        ids.move(fromOffsets: from, toOffset: to)
+                        store.leagueOrder = ids + more.map(\.id)
+                    }
+                } header: {
+                    Text("Following")
                 } footer: {
-                    Text("Drag to reorder. Hidden leagues disappear from the menu and Home.")
+                    Text("Drag to reorder. These leagues are in the menu and on Home.")
+                }
+                if !more.isEmpty {
+                    Section {
+                        ForEach(more) { l in row(l, followed: false) }
+                    } header: {
+                        Text("More to Follow")
+                    } footer: {
+                        Text("Alerts for these leagues are paused; your alert settings are kept.")
+                    }
                 }
             }
             .environment(\.editMode, .constant(.active))
             .navigationTitle("Leagues")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+        }
+    }
+
+    private func row(_ l: League, followed: Bool) -> some View {
+        HStack(spacing: 12) {
+            Button {
+                withAnimation(.snappy) { toggle(l, follow: !followed) }
+            } label: {
+                Image(systemName: followed ? "star.fill" : "star")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(followed ? .black : .white)
+                    .frame(width: 30, height: 30)
+                    .background(followed ? Color.white : Color.white.opacity(0.15), in: Circle())
+            }
+            .buttonStyle(.borderless)
+            LeagueIcon(league: l, size: 26)
+            Text(l.name).foregroundStyle(followed ? .white : Theme.secondary)
+            Spacer()
+        }
+        .opacity(followed ? 1 : 0.75)
+        .moveDisabled(!followed)
+    }
+
+    private func toggle(_ l: League, follow: Bool) {
+        if follow {
+            store.hiddenLeagues.remove(l.id)
+            // Back at the end of the Following list.
+            let shown = store.leagueOrder.filter { !store.hiddenLeagues.contains($0) && $0 != l.id }
+            let hidden = store.leagueOrder.filter { store.hiddenLeagues.contains($0) }
+            store.leagueOrder = shown + [l.id] + hidden
+        } else {
+            store.hiddenLeagues.insert(l.id)
+        }
+        Task { await AlertEngine.shared.refresh() }
+    }
+}
+
+/// Alternate app icons (Settings → App Icon).
+struct AppIconPicker: View {
+    @State private var current = UIApplication.shared.alternateIconName
+    private let icons: [(name: String?, title: String, preview: String)] = [
+        (nil, "Classic", "AppIcon"), ("AppIcon-Light", "Light", "AppIcon-Light"),
+        ("AppIcon-Glass", "Glass", "AppIcon-Glass"), ("AppIcon-Stadium", "Stadium Lights", "AppIcon-Stadium"),
+    ]
+
+    var body: some View {
+        Section("App Icon") {
+            ForEach(icons, id: \.title) { icon in
+                Button {
+                    guard UIApplication.shared.supportsAlternateIcons else { return }
+                    UIApplication.shared.setAlternateIconName(icon.name) { _ in
+                        DispatchQueue.main.async { current = UIApplication.shared.alternateIconName }
+                    }
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(uiImage: UIImage(named: icon.preview + "-preview") ?? UIImage())
+                            .resizable().frame(width: 40, height: 40)
+                            .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                        Text(icon.title).foregroundStyle(.white)
+                        Spacer()
+                        if current == icon.name { Image(systemName: "checkmark").foregroundStyle(Color.accentColor) }
+                    }
+                }
+            }
         }
     }
 }
@@ -404,6 +490,14 @@ struct SettingsView: View {
         NavigationStack {
             List {
                 NotificationSettingsSection()
+                AppIconPicker()
+                Section("Diagnostics") {
+                    NavigationLink {
+                        CrashLogView()
+                    } label: {
+                        LabeledContent("Crash Log", value: CrashLog.entries().isEmpty ? "No crashes" : "\(CrashLog.entries().count)")
+                    }
+                }
                 Section("Data") {
                     Button(cleared ? "Cache cleared" : "Clear cached data") {
                         Task {
@@ -503,6 +597,27 @@ enum BBLSearch {
 struct RouteView: View {
     let route: Route
     var body: some View {
+        content.onAppear { CrashLog.crumb("Open \(Self.describe(route))") }
+    }
+
+    static func describe(_ r: Route) -> String {
+        switch r {
+        case .team(let l, let t): return "team \(l)/\(t)"
+        case .player(let l, let p): return "player \(l)/\(p)"
+        case .tennisPlayer(_, let n): return "tennis player \(n)"
+        case .rider(let n): return "rider \(n)"
+        case .cyclingRace(let r): return "race \(r.name)"
+        case .cyclingTeam(let n): return "cycling team \(n)"
+        case .favorites: return "My Teams"
+        case .game(let g): return "game \(g.leagueId)/\(g.id)"
+        case .tournament(let t): return "tournament \(t.name)"
+        case .nbaCup: return "NBA Cup"
+        case .league(let id): return "league \(id)"
+        case .wiki(_, let n): return "page \(n)"
+        }
+    }
+
+    @ViewBuilder private var content: some View {
         switch route {
         case .team(let leagueId, let teamId):
             TeamView(leagueId: leagueId, teamId: teamId)

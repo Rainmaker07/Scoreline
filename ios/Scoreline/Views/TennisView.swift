@@ -515,7 +515,7 @@ struct TennisPhoto: View {
 }
 
 enum TennisPhotos {
-    private static var cache: [String: URL?] = [:]
+    private static let cache = LockedCache<String, URL?>()
 
     /// ESPN first; then studio headshots from ATP Tour and SofaScore (same style as ESPN's);
     /// Wikipedia only where allowed (player page header).

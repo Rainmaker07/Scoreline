@@ -7,14 +7,22 @@ struct ScorelineApp: App {
     init() {
         // Generous image cache so team logos and flags survive relaunches.
         URLCache.shared = URLCache(memoryCapacity: 64 << 20, diskCapacity: 512 << 20)
-        let nav = UINavigationBarAppearance()
-        nav.configureWithOpaqueBackground()
-        nav.backgroundColor = .black
-        nav.shadowColor = .clear
-        nav.largeTitleTextAttributes = [.foregroundColor: UIColor.white, .font: UIFont.systemFont(ofSize: 34, weight: .heavy)]
-        nav.titleTextAttributes = [.foregroundColor: UIColor.white]
-        UINavigationBar.appearance().standardAppearance = nav
-        UINavigationBar.appearance().scrollEdgeAppearance = nav
+        CrashLog.install()
+        // Navigation bar: see-through over the page colour at the top, dark blur when scrolled.
+        let edge = UINavigationBarAppearance()
+        edge.configureWithTransparentBackground()
+        let scrolled = UINavigationBarAppearance()
+        scrolled.configureWithDefaultBackground()
+        scrolled.backgroundEffect = UIBlurEffect(style: .systemUltraThinMaterialDark)
+        scrolled.backgroundColor = UIColor.black.withAlphaComponent(0.15)
+        for nav in [edge, scrolled] {
+            nav.shadowColor = .clear
+            nav.largeTitleTextAttributes = [.foregroundColor: UIColor.white, .font: UIFont.systemFont(ofSize: 34, weight: .heavy)]
+            nav.titleTextAttributes = [.foregroundColor: UIColor.white]
+        }
+        UINavigationBar.appearance().standardAppearance = scrolled
+        UINavigationBar.appearance().scrollEdgeAppearance = edge
+        UINavigationBar.appearance().compactAppearance = scrolled
     }
 
     var body: some Scene {
