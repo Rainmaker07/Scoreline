@@ -27,10 +27,76 @@ struct WinPoint: Identifiable {
 }
 
 struct KeyMoment: Identifiable {
+    enum Kind { case run, turnaround, play }
     var id: Int { index }
-    let index: Int
+    let index: Int              // point where the swing starts (its first play)
+    var endIndex: Int? = nil    // where a run ends
     let change: Double          // change of the away team's chance, in points
     let play: PlayItem
+    var endPlay: PlayItem? = nil
+    var kind: Kind = .play
+}
+
+enum KeyMoments {
+    /// Swings in the win probability: runs of at least `minSwing` points (a reversal of that
+    /// size ends a run), lead changes (crossing 50 % inside a run), and big single plays.
+    static func find(_ pts: [WinPoint], awayId: String, homeId: String, minSwing: Double = 10, limit: Int = 5) -> [KeyMoment] {
+        guard pts.count > 2 else { return [] }
+        // Zigzag pivots: a trend ends when the line reverses by at least minSwing.
+        var pivots: [Int] = []
+        var dir = 0     // +1 up, -1 down, 0 not yet known
+        var lo = 0, hi = 0, ext = 0
+        for i in 1..<pts.count {
+            let v = pts[i].away
+            switch dir {
+            case 0:
+                if v < pts[lo].away { lo = i }
+                if v > pts[hi].away { hi = i }
+                if pts[hi].away - pts[lo].away >= minSwing {
+                    if hi > lo { pivots = [lo]; dir = 1; ext = hi } else { pivots = [hi]; dir = -1; ext = lo }
+                }
+            case 1:
+                if v > pts[ext].away { ext = i }
+                else if pts[ext].away - v >= minSwing { pivots.append(ext); dir = -1; ext = i }
+            default:
+                if v < pts[ext].away { ext = i }
+                else if v - pts[ext].away >= minSwing { pivots.append(ext); dir = 1; ext = i }
+            }
+        }
+        if dir != 0 { pivots.append(ext) }
+        var out: [KeyMoment] = []
+        for k in stride(from: 1, to: pivots.count, by: 1) {
+            let a = pivots[k - 1], b = pivots[k]
+            let change = pts[b].away - pts[a].away
+            guard abs(change) >= minSwing else { continue }
+            // The run starts with the first play after the low / high point.
+            guard b > a else { continue }
+            // The run starts with the gaining team's first score (else its first play that helped).
+            let gainer = change > 0 ? awayId : homeId
+            let range = Array(a + 1...b)
+            let start = range.first(where: { pts[$0].play?.scoring == true && pts[$0].play?.teamId == gainer })
+                ?? range.first(where: { pts[$0].play?.teamId == gainer && (pts[$0].away - pts[$0 - 1].away) * change > 0 })
+                ?? range.first(where: { pts[$0].play != nil })
+            guard let start, let play = pts[start].play else { continue }
+            let crossed = (pts[a].away - 50) * (pts[b].away - 50) < 0
+            out.append(KeyMoment(index: start, endIndex: b, change: change, play: play, endPlay: pts[b].play,
+                                 kind: crossed ? .turnaround : .run))
+        }
+        // Big single plays not already inside a listed run.
+        for i in 1..<pts.count {
+            let d = pts[i].away - pts[i - 1].away
+            guard abs(d) >= 8, let play = pts[i].play,
+                  !out.contains(where: { $0.index <= i && i <= ($0.endIndex ?? $0.index) }) else { continue }
+            out.append(KeyMoment(index: i, change: d, play: play))
+        }
+        // Lead changes first among equals, then size.
+        let ranked = out.sorted {
+            let wa = abs($0.change) + ($0.kind == .turnaround ? 10 : 0)
+            let wb = abs($1.change) + ($1.kind == .turnaround ? 10 : 0)
+            return wa > wb
+        }
+        return Array(ranked.prefix(limit)).sorted { $0.index < $1.index }
+    }
 }
 
 enum PlayData {
@@ -81,6 +147,8 @@ struct PlaysSection: View {
     @State private var period: Int? = nil       // nil = all periods
     @State private var didPickDefault = false
     @State private var selected: Int? = nil     // selected win probability point
+    @State private var highlighted: String? = nil   // play opened from a key moment
+    @AppStorage("playsTab") private var tab = 0  // 0 win probability, 1 play-by-play
 
     init(league: League, summary: J, left: Side, right: Side) {
         self.league = league
@@ -104,13 +172,7 @@ struct PlaysSection: View {
         }
         let pts = raw.enumerated().map { WinPoint(id: $0.offset, away: $0.element.0, play: $0.element.1) }
         points = pts
-        // Key moments: the plays that moved the win probability most.
-        var swings: [KeyMoment] = []
-        for i in 1..<max(1, pts.count) {
-            guard let play = pts[i].play, !play.text.isEmpty else { continue }
-            swings.append(KeyMoment(index: i, change: pts[i].away - pts[i - 1].away, play: play))
-        }
-        moments = swings.sorted { abs($0.change) > abs($1.change) }.prefix(5).sorted { $0.index < $1.index }
+        moments = KeyMoments.find(pts, awayId: left.isHome ? right.id : left.id, homeId: left.isHome ? left.id : right.id)
     }
 
     private var periods: [Int] { Array(Set(plays.map(\.period))).sorted() }
@@ -121,15 +183,25 @@ struct PlaysSection: View {
     }
 
     var body: some View {
+        let hasChart = points.count > 3
         VStack(spacing: 14) {
-            if points.count > 3 {
+            if hasChart {
+                TextTabs(items: [0, 1], selection: $tab) { $0 == 0 ? "Win Probability" : "Play-by-Play" }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            if hasChart && tab == 0 {
                 WinProbabilityCard(points: points, moments: moments, left: left, right: right,
                                    baseball: PlayData.isBaseball(league), selected: $selected)
                 if !moments.isEmpty {
-                    KeyMomentsCard(moments: moments, left: left, right: right, selected: $selected)
+                    KeyMomentsCard(moments: moments, left: left, right: right, selected: $selected) { m in
+                        // Open the play in the play-by-play list.
+                        scoringOnly = false
+                        period = m.play.period
+                        highlighted = m.play.id
+                        tab = 1
+                    }
                 }
-            }
-            if plays.isEmpty {
+            } else if plays.isEmpty {
                 MessageCard(text: "Play-by-play appears once the game starts.")
             } else {
                 playList
@@ -211,6 +283,8 @@ struct PlaysSection: View {
             }
         }
         .padding(.vertical, 7)
+        .padding(.horizontal, highlighted == p.id ? 6 : 0)
+        .background(highlighted == p.id ? Color.yellow.opacity(0.18) : .clear, in: RoundedRectangle(cornerRadius: 8))
     }
 }
 
@@ -315,25 +389,24 @@ private struct WinProbabilityCard: View {
     }
 }
 
-/// The plays that changed the win probability most.
+/// Runs, lead changes and big plays in the win probability. Tapping one opens the play.
 private struct KeyMomentsCard: View {
     let moments: [KeyMoment]
     let left: Side
     let right: Side
     @Binding var selected: Int?
+    var open: (KeyMoment) -> Void = { _ in }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             CardTitle("Key moments")
             ForEach(Array(moments.enumerated()), id: \.element.id) { i, m in
                 if i > 0 { Divider().overlay(Theme.separator) }
-                Button {
-                    selected = selected == m.index ? nil : m.index
-                } label: {
-                    row(m).contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
+                Button { open(m) } label: { row(m).contentShape(Rectangle()) }
+                    .buttonStyle(.plain)
             }
+            Text("Runs and lead changes in the win probability. Tap one to see it in the play-by-play.")
+                .font(.caption2).foregroundStyle(Theme.tertiary).padding(.top, 6)
         }
         .card()
     }
@@ -342,18 +415,32 @@ private struct KeyMomentsCard: View {
         // Positive change favours the left (away) team.
         let gainer = m.change >= 0 ? left : right
         let side = m.play.teamId == left.id ? left : m.play.teamId == right.id ? right : gainer
+        let label: String = {
+            switch m.kind {
+            case .turnaround: return "Lead change"
+            case .run:
+                if let e = m.endPlay {
+                    return "Run to \(e.periodShort) \(e.clock) · \(e.away)-\(e.home)"
+                }
+                return "Run"
+            case .play: return "Big play"
+            }
+        }()
         return HStack(alignment: .top, spacing: 10) {
             LogoView(url: side.logo, fallback: side.abbr, size: 20)
             VStack(alignment: .leading, spacing: 2) {
                 Text("\(m.play.periodShort) \(m.play.clock) · \(m.play.away)-\(m.play.home)")
                     .font(.caption.weight(.semibold)).foregroundStyle(Theme.secondary).monospacedDigit()
                 Text(m.play.text).font(.footnote.weight(.semibold))
+                Text(label).font(.caption).foregroundStyle(m.kind == .turnaround ? Color.yellow : Theme.secondary)
             }
             Spacer(minLength: 6)
             Text(String(format: "%@ +%.0f%%", gainer.abbr, abs(m.change)))
                 .font(.caption.weight(.bold)).monospacedDigit()
                 .padding(.horizontal, 8).padding(.vertical, 4)
-                .background(Color.white.opacity(selected == m.index ? 0.25 : 0.1), in: Capsule())
+                .background(Color.white.opacity(0.1), in: Capsule())
+            Image(systemName: "chevron.right").font(.system(size: 10, weight: .bold)).foregroundStyle(Theme.tertiary)
+                .padding(.top, 5)
         }
         .padding(.vertical, 8)
     }

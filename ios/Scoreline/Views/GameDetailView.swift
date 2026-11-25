@@ -1,3 +1,4 @@
+import UIKit
 import SwiftUI
 
 struct GameDetailView: View {
@@ -659,15 +660,17 @@ struct BoxTable: View {
     private var played: [BoxRow] { rows.filter { $0.note == nil } }
     private var dnp: [BoxRow] { rows.filter { $0.note != nil } }
 
+    /// Starters, then bench; the grey/black shading runs on across both sections.
     private var lines: [Line] {
         let starters = played.filter { !$0.bench }
         let bench = played.filter(\.bench)
         var out: [Line] = []
         let sectioned = !starters.isEmpty && !bench.isEmpty
+        var n = 0
         if sectioned { out.append(.header(sectionTitles.0)) }
-        out += starters.enumerated().map { .player($0.element, shaded: $0.offset % 2 == 1) }
+        for r in starters { out.append(.player(r, shaded: n % 2 == 1)); n += 1 }
         if sectioned { out.append(.header(sectionTitles.1)) }
-        out += bench.enumerated().map { .player($0.element, shaded: $0.offset % 2 == 1) }
+        for r in bench { out.append(.player(r, shaded: n % 2 == 1)); n += 1 }
         return out
     }
 
@@ -681,11 +684,23 @@ struct BoxTable: View {
         return out
     }
 
+    /// One fixed width per column (from its widest value, bold totals included), so every
+    /// row, the header and the team row line up exactly.
+    private var widths: [CGFloat] {
+        let font = UIFont.monospacedDigitSystemFont(ofSize: 15, weight: .bold)
+        func w(_ t: String) -> CGFloat { (t as NSString).size(withAttributes: [.font: font]).width }
+        return labels.indices.map { i in
+            let values = [labels[i]] + played.map { i < $0.stats.count ? $0.stats[i] : "" } + [i < totals.count ? totals[i] : ""]
+            return max(30, (values.map(w).max() ?? 0) + 10)
+        }
+    }
+
     private var hasPhotos: Bool { rows.contains { $0.headshot != nil } }
 
     var body: some View {
         let lines = self.lines
         let maxima = self.maxima
+        let widths = self.widths
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 LogoView(url: logo, fallback: abbr, size: 20)
@@ -699,21 +714,21 @@ struct BoxTable: View {
                         switch line {
                         case .header(let t):
                             sectionHeader(t)
-                        case .player(let r, let shaded):
+                        case .player(let r, _):
                             nameCell(r).frame(height: rowHeight, alignment: .leading)
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(shaded ? Color.white.opacity(0.04) : .clear)
                         }
                     }
                     if !totals.isEmpty {
-                        Text("Team").font(.footnote.weight(.bold)).frame(height: rowHeight, alignment: .leading)
+                        Text("Team").font(.footnote.weight(.bold))
+                            .frame(height: rowHeight, alignment: .leading)
                     }
                 }
                 .frame(width: hasPhotos ? 140 : 118, alignment: .leading)
                 ScrollView(.horizontal, showsIndicators: false) {
                     VStack(alignment: .trailing, spacing: 0) {
                         HStack(spacing: 0) {
-                            ForEach(Array(labels.enumerated()), id: \.offset) { cell($0.element) }
+                            ForEach(Array(labels.enumerated()), id: \.offset) { cell($0.element, width: widths[$0.offset]) }
                         }
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(Theme.secondary)
@@ -722,20 +737,22 @@ struct BoxTable: View {
                             switch line {
                             case .header:
                                 Color.clear.frame(height: headerHeight)
-                            case .player(let r, let shaded):
+                            case .player(let r, _):
                                 HStack(spacing: 0) {
                                     ForEach(Array(r.stats.enumerated()), id: \.offset) { i, v in
-                                        cell(v, bold: maxima[i].map { Double(v) == $0 } ?? false)
+                                        cell(v, width: i < widths.count ? widths[i] : 36,
+                                             bold: maxima[i].map { Double(v) == $0 } ?? false)
                                     }
                                 }
                                 .font(.footnote)
                                 .frame(height: rowHeight)
-                                .background(shaded ? Color.white.opacity(0.04) : .clear)
                             }
                         }
                         if !totals.isEmpty {
                             HStack(spacing: 0) {
-                                ForEach(Array(totals.enumerated()), id: \.offset) { cell($0.element) }
+                                ForEach(Array(totals.enumerated()), id: \.offset) { i, v in
+                                    cell(v, width: i < widths.count ? widths[i] : 36)
+                                }
                             }
                             .font(.footnote.weight(.bold))
                             .frame(height: rowHeight)
@@ -743,6 +760,23 @@ struct BoxTable: View {
                     }
                     .monospacedDigit()
                 }
+                .defaultScrollAnchor(.leading)
+            }
+            // Full-width shading bands behind every other player row.
+            .background(alignment: .top) {
+                VStack(spacing: 0) {
+                    Color.clear.frame(height: 22)
+                    ForEach(lines) { line in
+                        switch line {
+                        case .header: Color.clear.frame(height: headerHeight)
+                        case .player(_, let shaded):
+                            (shaded ? Color.white.opacity(0.05) : Color.clear)
+                                .frame(height: rowHeight)
+                                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                        }
+                    }
+                }
+                .padding(.horizontal, -6)
             }
             if let pct = shootingLine {
                 Text(pct).font(.caption).foregroundStyle(Theme.secondary).monospacedDigit()
@@ -781,10 +815,10 @@ struct BoxTable: View {
             .padding(.bottom, 2)
     }
 
-    private func cell(_ t: String, bold: Bool = false) -> some View {
+    private func cell(_ t: String, width: CGFloat, bold: Bool = false) -> some View {
         Text(t).lineLimit(1)
             .fontWeight(bold ? .heavy : nil)
-            .frame(minWidth: 38, alignment: .trailing).padding(.horizontal, 2)
+            .frame(width: width, alignment: .trailing)
     }
 
     @ViewBuilder private func nameCell(_ r: BoxRow) -> some View {
@@ -862,10 +896,9 @@ private struct BBLLeadersCard: View {
                 ForEach(rows, id: \.0) { r in
                     VStack(alignment: .leading, spacing: 6) {
                         Text(r.0).font(.caption.weight(.semibold)).foregroundStyle(Theme.secondary)
-                        HStack {
-                            leader(r.1, trailing: false)
-                            Spacer()
-                            leader(r.2, trailing: true)
+                        HStack(alignment: .top, spacing: 10) {
+                            leader(r.1, trailing: false).frame(maxWidth: .infinity, alignment: .leading)
+                            leader(r.2, trailing: true).frame(maxWidth: .infinity, alignment: .trailing)
                         }
                     }
                 }
@@ -880,10 +913,8 @@ private struct BBLLeadersCard: View {
                 HStack(spacing: 8) {
                     if !trailing { photo(l) }
                     VStack(alignment: trailing ? .trailing : .leading, spacing: 1) {
-                        HStack(spacing: 4) {
-                            Text(l.name).font(.subheadline.weight(.bold)).lineLimit(1)
-                            if !l.position.isEmpty { Text(l.position).font(.caption2).foregroundStyle(Theme.secondary) }
-                        }
+                        Text(l.name).font(.subheadline.weight(.bold)).lineLimit(1).minimumScaleFactor(0.7)
+                        if !l.position.isEmpty { Text(l.position).font(.caption2).foregroundStyle(Theme.secondary) }
                         Text(l.value).font(.title3.weight(.heavy)).monospacedDigit()
                     }
                     if trailing { photo(l) }
@@ -915,10 +946,9 @@ private struct GameLeadersCard: View {
                 ForEach(0..<min(4, l["leaders"].array.count), id: \.self) { i in
                     VStack(alignment: .leading, spacing: 6) {
                         Text(l["leaders"][i]["displayName"].str).font(.caption.weight(.semibold)).foregroundStyle(Theme.secondary)
-                        HStack {
-                            leader(l["leaders"][i]["leaders"][0], trailing: false)
-                            Spacer()
-                            leader(r["leaders"][i]["leaders"][0], trailing: true)
+                        HStack(alignment: .top, spacing: 10) {
+                            leader(l["leaders"][i]["leaders"][0], trailing: false).frame(maxWidth: .infinity, alignment: .leading)
+                            leader(r["leaders"][i]["leaders"][0], trailing: true).frame(maxWidth: .infinity, alignment: .trailing)
                         }
                     }
                 }
@@ -934,6 +964,10 @@ private struct GameLeadersCard: View {
                     if !trailing { headshot(x) }
                     VStack(alignment: trailing ? .trailing : .leading, spacing: 1) {
                         Text(x["athlete"]["shortName"].str).font(.subheadline.weight(.bold))
+                            .lineLimit(1).minimumScaleFactor(0.7)
+                        if let pos = x["athlete"]["position"]["abbreviation"].string {
+                            Text(pos).font(.caption2).foregroundStyle(Theme.secondary)
+                        }
                         Text(x["displayValue"].str).font(.title3.weight(.heavy)).monospacedDigit()
                     }
                     if trailing { headshot(x) }

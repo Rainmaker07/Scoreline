@@ -53,10 +53,12 @@ enum BBL {
             "OLD": "Oldenburg", "WÜR": "Würzburg", "WUE": "Würzburg", "HAM": "Hamburg", "HAG": "Hagen",
             "BRA": "Braunschweig", "BAM": "Bamberg", "CHE": "Chemnitz", "GÖT": "Göttingen", "GOE": "Göttingen",
             "HEI": "Heidelberg", "VEC": "Vechta", "BAY": "Bayreuth", "WEI": "Weißenfels", "MBC": "Weißenfels",
-            "TRI": "Trier", "JEN": "Jena", "ROS": "Rostock", "FRA": "Frankfurt", "BHV": "Bremerhaven",
+            "TRI": "Trier", "JEN": "Jena", "ROS": "Rostock", "HRO": "Rostock", "MIT": "Mitteldeutscher BC", "FRA": "Frankfurt", "BHV": "Bremerhaven",
         ]
         if let k = known[tlc.uppercased()] { return k }
-        return name.split(separator: " ").last.map(String.init) ?? name
+        let last = name.split(separator: " ").last.map(String.init) ?? name
+        // "SEAWOLVES" -> "Seawolves"
+        return last == last.uppercased() && last.count > 3 ? last.capitalized : last
     }
 
     static func state(_ status: String) -> GameState {
@@ -200,8 +202,9 @@ enum BBL {
 
     static let boxLabels = ["MIN", "PTS", "FG", "3PT", "FT", "REB", "AST", "STL", "BLK", "TO", "PF", "+/-", "EFF"]
 
+    /// Whole minutes ("23:41" -> "24").
     private static func minutes(_ seconds: Int) -> String {
-        String(format: "%d:%02d", seconds / 60, seconds % 60)
+        String(Int((Double(seconds) / 60).rounded()))
     }
 
     static func boxLine(_ p: J) -> [String] {
