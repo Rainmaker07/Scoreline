@@ -130,12 +130,14 @@ struct LogoView: View {
                     }
                 }
                 .id(urls[attempt])
-            } else {
+            } else if !fallback.isEmpty {
                 ZStack {
                     Circle().fill(Theme.card2)
                     Text(String(fallback.prefix(3)).uppercased())
                         .font(.system(size: size * 0.28, weight: .heavy))
                 }
+            } else {
+                Color.clear
             }
         }
         .frame(width: size, height: size)

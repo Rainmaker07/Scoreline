@@ -142,9 +142,17 @@ struct TournamentLogo: View {
     var body: some View {
         ZStack {
             if let url {
-                LogoView(url: url, fallback: t.name, size: size)
-                    .padding(3)
-                    .background(Color.white, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                // If the logo can't be loaded, the initials show on the tile (never a blank tile).
+                CachedImage(url: url) { phase in
+                    switch phase {
+                    case .success(let img): img.resizable().scaledToFit()
+                    case .failure: Text(initials).font(.system(size: size * 0.3, weight: .heavy)).foregroundStyle(Color(hex: t.tier.color))
+                    default: Color.clear
+                    }
+                }
+                .frame(width: size, height: size)
+                .padding(3)
+                .background(Color.white, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
             } else {
                 // No logo found: a consistent initials badge in the tier colour.
                 Text(initials)
