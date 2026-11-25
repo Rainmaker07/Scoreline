@@ -85,9 +85,7 @@ private struct OddsCard: View {
     }
 
     var body: some View {
-        let o = summary["pickcenter"].array.first ?? summary["odds"].array.first ?? J(nil)
-        let homeId = summary["header"]["competitions"][0]["competitors"].array.first { $0["homeAway"].str == "home" }?["id"].str
-        func side(_ s: Side) -> J { s.id == homeId ? o["homeTeamOdds"] : o["awayTeamOdds"] }
+        let o = odds
         let l = Self.decimal(side(left)["moneyLine"].double)
         let r = Self.decimal(side(right)["moneyLine"].double)
         let draw = Self.decimal(o["drawOdds"]["moneyLine"].double)
@@ -114,6 +112,13 @@ private struct OddsCard: View {
             }
             .card()
         }
+    }
+
+    private var odds: J { summary["pickcenter"].array.first ?? summary["odds"].array.first ?? J(nil) }
+
+    private func side(_ s: Side) -> J {
+        let homeId = summary["header"]["competitions"][0]["competitors"].array.first { $0["homeAway"].str == "home" }?["id"].str
+        return s.id == homeId ? odds["homeTeamOdds"] : odds["awayTeamOdds"]
     }
 
     private func price(_ label: String, _ value: String?, logo: URL?) -> some View {
